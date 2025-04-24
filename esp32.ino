@@ -3,9 +3,28 @@
 #include <WebServer.h>
 #include "esp_camera.h"
 
-#define CAMERA_MODEL_AI_THINKER
-#include "camera_pins.h"
+// Camera Pins
+#define PWDN_GPIO_NUM 32
+#define RESET_GPIO_NUM -1
+#define XCLK_GPIO_NUM 0
+#define SIOD_GPIO_NUM 26
+#define SIOC_GPIO_NUM 27
 
+#define Y9_GPIO_NUM 35
+#define Y8_GPIO_NUM 34
+#define Y7_GPIO_NUM 39
+#define Y6_GPIO_NUM 36
+#define Y5_GPIO_NUM 21
+#define Y4_GPIO_NUM 19
+#define Y3_GPIO_NUM 18
+#define Y2_GPIO_NUM 5
+#define VSYNC_GPIO_NUM 25
+#define HREF_GPIO_NUM 23
+#define PCLK_GPIO_NUM 22
+
+#define LED_GPIO_NUM 4
+
+// Serial2 Pins
 #define RXD2 13
 #define TXD2 12
 
@@ -50,7 +69,7 @@ void setup()
   config.pin_pwdn = PWDN_GPIO_NUM;
   config.pin_reset = RESET_GPIO_NUM;
   config.xclk_freq_hz = 20000000;
-  config.frame_size = FRAMESIZE_UXGA;
+  config.frame_size = FRAMESIZE_VGA;
   config.pixel_format = PIXFORMAT_JPEG;
   config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
   config.fb_location = CAMERA_FB_IN_PSRAM;
@@ -65,7 +84,7 @@ void setup()
   }
   else
   {
-    config.frame_size = FRAMESIZE_SVGA;
+    config.frame_size = FRAMESIZE_VGA;
     config.fb_location = CAMERA_FB_IN_DRAM;
   }
 
@@ -82,7 +101,7 @@ void setup()
     sensor->set_brightness(sensor, 1);
     sensor->set_saturation(sensor, -2);
   }
-  sensor->set_framesize(sensor, FRAMESIZE_QVGA);
+  sensor->set_framesize(sensor, FRAMESIZE_VGA);
 
   // Connect to WiFi
   WiFi.begin(ssid, password);
@@ -142,6 +161,10 @@ void loop()
   delay(10);
 }
 
+void resetConfig()
+{
+}
+
 String latestCommand = "";
 void changeConfig(String command)
 {
@@ -151,9 +174,19 @@ void changeConfig(String command)
   latestCommand = command;
   Serial.println("Changing config to: " + command);
 
+  sensor_t *s = esp_camera_sensor_get();
+
+  // Reset to default settings
+  s->set_framesize(s, FRAMESIZE_VGA);
+  s->set_quality(s, 12);
+  s->set_saturation(s, 0);
+
   if (command == "xo")
   {
-    //
+    s->set_framesize(s, FRAMESIZE_VGA);
+    s->set_quality(s, 9);
+    s->set_saturation(s, 2);
+    analogWrite(LED_GPIO_NUM, intensity);
   }
   else if (command == "rubik")
   {
@@ -232,7 +265,7 @@ void handleConfig()
   if (server.hasArg("led_intensity"))
   {
     int intensity = server.arg("led_intensity").toInt();
-    analogWrite(4, intensity);
+    analogWrite(LED_GPIO_NUM, intensity);
   }
 
   server.send(200, "text/plain", "Camera settings updated!");
