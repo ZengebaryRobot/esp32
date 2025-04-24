@@ -161,10 +161,6 @@ void loop()
   delay(10);
 }
 
-void resetConfig()
-{
-}
-
 String latestCommand = "";
 void changeConfig(String command)
 {
@@ -180,13 +176,14 @@ void changeConfig(String command)
   s->set_framesize(s, FRAMESIZE_VGA);
   s->set_quality(s, 12);
   s->set_saturation(s, 0);
+  analogWrite(LED_GPIO_NUM, 0);
 
   if (command == "xo")
   {
     s->set_framesize(s, FRAMESIZE_VGA);
     s->set_quality(s, 9);
     s->set_saturation(s, 2);
-    analogWrite(LED_GPIO_NUM, intensity);
+    analogWrite(LED_GPIO_NUM, 200);
   }
   else if (command == "rubik")
   {
