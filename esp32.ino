@@ -1,6 +1,7 @@
 #include <WiFi.h>
+#include <AsyncTCP.h>
+#include <ESPAsyncWebServer.h>
 #include <HTTPClient.h>
-#include <WebServer.h>
 #include "esp_camera.h"
 
 #define CAMERA_MODEL_AI_THINKER
@@ -15,12 +16,13 @@ const char *password = "1234abcdABCD";
 const char *serverEndpoint = "http://192.168.1.3:5000/process";
 const char *slaveCamEndpoint = "http://192.168.1.100/capture";
 
-WebServer server(80);
+AsyncWebServer server(80);
 sensor_t *sensor = nullptr;
 
+bool toBool(String value);
 void changeConfig(String command);
-void handleConfig();
-void handleStream();
+void handleConfig(AsyncWebServerRequest *request);
+void handleStream(AsyncWebServerRequest *request);
 String getPythonData(String command);
 
 void setup()
@@ -110,8 +112,6 @@ void setup()
 
 void loop()
 {
-  server.handleClient();
-
   if (Serial2.available())
   {
     String line = Serial2.readStringUntil('\n');
@@ -167,13 +167,13 @@ bool toBool(String value)
   return (value == "1" || value == "true" || value == "on");
 }
 
-void handleConfig()
+void handleConfig(AsyncWebServerRequest *request)
 {
   sensor_t *s = esp_camera_sensor_get();
 
-  if (server.hasArg("framesize"))
+  if (request->hasParam("framesize"))
   {
-    String value = server.arg("framesize");
+    String value = request->getParam("framesize")->value();
     if (value == "QVGA")
       s->set_framesize(s, FRAMESIZE_QVGA);
     else if (value == "SVGA")
@@ -182,71 +182,75 @@ void handleConfig()
       s->set_framesize(s, FRAMESIZE_VGA);
   }
 
-  if (server.hasArg("quality"))
-    s->set_quality(s, server.arg("quality").toInt());
-  if (server.hasArg("contrast"))
-    s->set_contrast(s, server.arg("contrast").toInt());
-  if (server.hasArg("brightness"))
-    s->set_brightness(s, server.arg("brightness").toInt());
-  if (server.hasArg("saturation"))
-    s->set_saturation(s, server.arg("saturation").toInt());
-  if (server.hasArg("gainceiling"))
-    s->set_gainceiling(s, (gainceiling_t)server.arg("gainceiling").toInt());
+  if (request->hasParam("quality"))
+    s->set_quality(s, request->getParam("quality")->value().toInt());
+  if (request->hasParam("contrast"))
+    s->set_contrast(s, request->getParam("contrast")->value().toInt());
+  if (request->hasParam("brightness"))
+    s->set_brightness(s, request->getParam("brightness")->value().toInt());
+  if (request->hasParam("saturation"))
+    s->set_saturation(s, request->getParam("saturation")->value().toInt());
+  if (request->hasParam("gainceiling"))
+    s->set_gainceiling(s, (gainceiling_t)request->getParam("gainceiling")->value().toInt());
 
-  if (server.hasArg("colorbar"))
-    s->set_colorbar(s, toBool(server.arg("colorbar")));
-  if (server.hasArg("awb"))
-    s->set_whitebal(s, toBool(server.arg("awb")));
-  if (server.hasArg("agc"))
-    s->set_gain_ctrl(s, toBool(server.arg("agc")));
-  if (server.hasArg("aec"))
-    s->set_exposure_ctrl(s, toBool(server.arg("aec")));
-  if (server.hasArg("hmirror"))
-    s->set_hmirror(s, toBool(server.arg("hmirror")));
-  if (server.hasArg("vflip"))
-    s->set_vflip(s, toBool(server.arg("vflip")));
+  if (request->hasParam("colorbar"))
+    s->set_colorbar(s, toBool(request->getParam("colorbar")->value()));
+  if (request->hasParam("awb"))
+    s->set_whitebal(s, toBool(request->getParam("awb")->value()));
+  if (request->hasParam("agc"))
+    s->set_gain_ctrl(s, toBool(request->getParam("agc")->value()));
+  if (request->hasParam("aec"))
+    s->set_exposure_ctrl(s, toBool(request->getParam("aec")->value()));
+  if (request->hasParam("hmirror"))
+    s->set_hmirror(s, toBool(request->getParam("hmirror")->value()));
+  if (request->hasParam("vflip"))
+    s->set_vflip(s, toBool(request->getParam("vflip")->value()));
 
-  if (server.hasArg("awb_gain"))
-    s->set_awb_gain(s, server.arg("awb_gain").toInt());
-  if (server.hasArg("agc_gain"))
-    s->set_agc_gain(s, server.arg("agc_gain").toInt());
-  if (server.hasArg("aec_value"))
-    s->set_aec_value(s, server.arg("aec_value").toInt());
+  if (request->hasParam("awb_gain"))
+    s->set_awb_gain(s, request->getParam("awb_gain")->value().toInt());
+  if (request->hasParam("agc_gain"))
+    s->set_agc_gain(s, request->getParam("agc_gain")->value().toInt());
+  if (request->hasParam("aec_value"))
+    s->set_aec_value(s, request->getParam("aec_value")->value().toInt());
 
-  if (server.hasArg("aec2"))
-    s->set_aec2(s, toBool(server.arg("aec2")));
-  if (server.hasArg("dcw"))
-    s->set_dcw(s, toBool(server.arg("dcw")));
-  if (server.hasArg("bpc"))
-    s->set_bpc(s, toBool(server.arg("bpc")));
-  if (server.hasArg("wpc"))
-    s->set_wpc(s, toBool(server.arg("wpc")));
-  if (server.hasArg("raw_gma"))
-    s->set_raw_gma(s, toBool(server.arg("raw_gma")));
-  if (server.hasArg("lenc"))
-    s->set_lenc(s, toBool(server.arg("lenc")));
+  if (request->hasParam("aec2"))
+    s->set_aec2(s, toBool(request->getParam("aec2")->value()));
+  if (request->hasParam("dcw"))
+    s->set_dcw(s, toBool(request->getParam("dcw")->value()));
+  if (request->hasParam("bpc"))
+    s->set_bpc(s, toBool(request->getParam("bpc")->value()));
+  if (request->hasParam("wpc"))
+    s->set_wpc(s, toBool(request->getParam("wpc")->value()));
+  if (request->hasParam("raw_gma"))
+    s->set_raw_gma(s, toBool(request->getParam("raw_gma")->value()));
+  if (request->hasParam("lenc"))
+    s->set_lenc(s, toBool(request->getParam("lenc")->value()));
 
-  if (server.hasArg("ae_level"))
-    s->set_ae_level(s, server.arg("ae_level").toInt());
+  if (request->hasParam("ae_level"))
+    s->set_ae_level(s, request->getParam("ae_level")->value().toInt());
 
-  if (server.hasArg("led_intensity"))
+  if (request->hasParam("led_intensity"))
   {
-    int intensity = server.arg("led_intensity").toInt();
+    int intensity = request->getParam("led_intensity")->value().toInt();
     analogWrite(4, intensity);
   }
 
-  server.send(200, "text/plain", "Camera settings updated!");
+  request->send(200, "text/plain", "Camera settings updated!");
 }
 
-void handleStream()
+void handleStream(AsyncWebServerRequest *request)
 {
-  WiFiClient client = server.client();
-  String header =
-      "HTTP/1.1 200 OK\r\n"
-      "Content-Type: multipart/x-mixed-replace; boundary=frame\r\n\r\n";
-  client.print(header);
+  AsyncWebServerResponse *response = request->beginResponseStream("multipart/x-mixed-replace; boundary=frame");
+  response->addHeader("Cache-Control", "no-cache");
+  response->addHeader("Pragma", "no-cache");
+  request->send(response);
 
-  while (client.connected())
+  request->onDisconnect([request]()
+                        {
+    Serial.println("Client disconnected, stopping stream.");
+    request->client()->stop(); });
+
+  while (request->client()->connected())
   {
     camera_fb_t *fb = esp_camera_fb_get();
     if (!fb)
@@ -254,12 +258,11 @@ void handleStream()
       Serial.println("Camera capture failed");
       break;
     }
-    client.printf("--frame\r\nContent-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n", fb->len);
-    client.write(fb->buf, fb->len);
-    client.print("\r\n");
+    String boundary = "--frame\r\nContent-Type: image/jpeg\r\nContent-Length: " + String(fb->len) + "\r\n\r\n";
+    request->client()->write(boundary.c_str(), boundary.length());
+    request->client()->write(reinterpret_cast<const char *>(fb->buf), fb->len);
+    request->client()->write("\r\n", 2);
     esp_camera_fb_return(fb);
-    if (!client.connected())
-      break;
     delay(30);
   }
 }
