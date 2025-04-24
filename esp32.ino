@@ -13,6 +13,7 @@ const char *ssid = "Zengebary";
 const char *password = "1234abcdABCD";
 
 const char *serverEndpoint = "http://192.168.1.3:5000/process";
+const char *slaveCamEndpoint = "http://192.168.1.100/capture";
 
 WebServer server(80);
 sensor_t *sensor = nullptr;
@@ -113,18 +114,31 @@ void loop()
 
   if (Serial2.available())
   {
-    String command = Serial2.readStringUntil('\n');
-    command.trim();
-    if (command.length())
+    String line = Serial2.readStringUntil('\n');
+    line.trim();
+    if (line.length())
     {
-      Serial.println("Received command: " + command);
-      changeConfig(command);
-      String response = getPythonData(command);
-      Serial2.println(response);
+      Serial.println("Received command: " + line);
+
+      // <camId> <action>
+      int sp = line.indexOf(' ');
+      if (sp < 0)
+      {
+        Serial2.println("ERROR");
+      }
+      else
+      {
+        int camId = line.substring(0, sp).toInt();
+        String action = line.substring(sp + 1);
+        String serverReply = getPythonData(action, camId);
+        Serial2.println(serverReply);
+      }
     }
+
     while (Serial2.available())
       Serial2.read();
   }
+
   delay(10);
 }
 
@@ -136,8 +150,6 @@ void changeConfig(String command)
 
   latestCommand = command;
   Serial.println("Changing config to: " + command);
-
-  sensor_t *s = esp_camera_sensor_get();
 
   if (command == "xo")
   {
@@ -252,7 +264,7 @@ void handleStream()
   }
 }
 
-String getPythonData(String command)
+String getPythonData(String command, int camId)
 {
   if (WiFi.status() != WL_CONNECTED)
   {
@@ -260,11 +272,47 @@ String getPythonData(String command)
     return "ERROR";
   }
 
-  camera_fb_t *fb = esp_camera_fb_get();
-  if (!fb)
+  camera_fb_t *fb = nullptr;
+
+  if (camId == 0)
   {
-    Serial.println("Camera capture failed");
-    return "ERROR";
+    changeConfig(command);
+
+    fb = esp_camera_fb_get();
+    if (!fb)
+    {
+      Serial.println("Camera capture failed");
+      return "ERROR";
+    }
+  }
+  else
+  {
+    HTTPClient httpGet;
+    httpGet.begin(slaveCamEndpoint);
+
+    int code = httpGet.GET();
+
+    if (code != 200)
+    {
+      Serial.println("Failed to get image from slave camera. HTTP code: " + String(code) + " - " + httpGet.errorToString(code));
+      httpGet.end();
+      return "ERROR";
+    }
+
+    WiFiClient *stream = httpGet.getStreamPtr();
+    size_t len = httpGet.getSize();
+
+    fb = (camera_fb_t *)malloc(sizeof(camera_fb_t));
+    fb->len = len;
+    fb->buf = (uint8_t *)malloc(len);
+
+    size_t idx = 0;
+    while (stream->available() && idx < len)
+    {
+      fb->buf[idx++] = stream->read();
+    }
+
+    httpGet.end();
   }
 
   HTTPClient http;
@@ -296,6 +344,16 @@ String getPythonData(String command)
   }
 
   http.end();
-  esp_camera_fb_return(fb);
+
+  if (camId == 0)
+  {
+    esp_camera_fb_return(fb);
+  }
+  else
+  {
+    free(fb->buf);
+    free(fb);
+  }
+
   return response;
 }
