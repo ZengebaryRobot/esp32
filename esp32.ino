@@ -46,9 +46,12 @@ String getPythonData(String command);
 
 void setup()
 {
+  // Serial monitor for debugging
   Serial.begin(115200);
   Serial.setDebugOutput(true);
-  Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2);
+
+  // Arduino communication
+  Serial2.begin(115200, SERIAL_8N1, RXD2, TXD2);
 
   // Camera init config
   camera_config_t config;
