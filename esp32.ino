@@ -49,7 +49,7 @@ void setup()
   Serial.setDebugOutput(true);
 
   // Arduino communication
-  Serial2.begin(115200, SERIAL_8N1, RXD2, TXD2);
+  Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2);
 
   // Camera init config
   camera_config_t config;
