@@ -3,13 +3,24 @@
 #include <WebServer.h>
 #include "esp_camera.h"
 
+// Include game files
+#include "xo_game.h"
+#include "rubik_game.h"
+#include "memory_game.h"
+#include "cups_game.h"
+
+// Enable ESP32 server
+#define ENABLE_ESP32_SERVER 1
+#define ENABLE_SERVER_STREAMING 1
+#define ENABLE_SERVER_CONFIG 1
+#define ENABLE_SERVER_GAME_CHANGE 1
+
 // Camera Pins
 #define PWDN_GPIO_NUM 32
 #define RESET_GPIO_NUM -1
 #define XCLK_GPIO_NUM 0
 #define SIOD_GPIO_NUM 26
 #define SIOC_GPIO_NUM 27
-
 #define Y9_GPIO_NUM 35
 #define Y8_GPIO_NUM 34
 #define Y7_GPIO_NUM 39
@@ -21,26 +32,89 @@
 #define VSYNC_GPIO_NUM 25
 #define HREF_GPIO_NUM 23
 #define PCLK_GPIO_NUM 22
-
 #define LED_GPIO_NUM 4
 
-// Serial2 Pins
+// Serial2 Pins (comm with Arduino)
 #define RXD2 13
 #define TXD2 12
+#define STEPPER_COUNT 10
+#define TIMEOUT_MS_SERVO 5000
+#define TIMEOUT_MS_STEPPER 5000
 
-const char *ssid = "Zengebary";
-const char *password = "1234abcdABCD";
+// Game management
+enum GameType
+{
+  GAME_NONE = -1,
+  GAME_XO = 0,
+  GAME_RUBIK = 1,
+  GAME_MEMORY = 2,
+  GAME_CUPS = 3,
+  GAME_COUNT = 4
+};
 
+typedef void (*GameFunctionPtr)();
+
+struct Game
+{
+  const char *name;
+  GameFunctionPtr startGame;
+  GameFunctionPtr gameLoop;
+  GameFunctionPtr stopGame; // New function pointer for stopping games
+};
+
+Game games[GAME_COUNT];
+int currentGameIndex = GAME_NONE;
+
+// Wifi credentials
+const char *ssid = "AS";
+const char *password = "#$ahSB#$135#$";
+
+// Main server endpoint
 const char *serverEndpoint = "http://192.168.1.3:5000/process";
-const char *slaveCamEndpoint = "http://192.168.1.100/capture";
 
+// To get image from camera or change config
+#if ENABLE_ESP32_SERVER
 WebServer server(80);
+#endif
+
+// Camera configuration
 sensor_t *sensor = nullptr;
 
+void initCamera();
+void connectToWiFi();
+void initGames();
+void switchGame(int gameIndex);
+
+// Function declarations for stopping games
+void stopXOGame();
+void stopRubikGame();
+void stopMemoryGame();
+void stopCupsGame();
+
+String readLine();
+bool sendServoCommand(int a1, int a2, int a3);
+bool sendStepperCommand(const int cmds[10]);
+
 void changeConfig(String command);
-void handleConfig();
-void handleStream();
 String getPythonData(String command);
+
+#if ENABLE_ESP32_SERVER
+void setupServerEndpoints();
+bool toBool(String value);
+
+#if ENABLE_SERVER_GAME_CHANGE
+void handleChangeGame();
+#endif
+
+#if ENABLE_SERVER_CONFIG
+void handleConfig();
+#endif
+
+#if ENABLE_SERVER_STREAMING
+void handleStream();
+#endif
+
+#endif
 
 void setup()
 {
@@ -51,7 +125,28 @@ void setup()
   // Arduino communication
   Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2);
 
-  // Camera init config
+  initCamera();
+  connectToWiFi();
+  initGames();
+
+#if ENABLE_ESP32_SERVER
+  setupServerEndpoints();
+#endif
+}
+
+void loop()
+{
+#if ENABLE_ESP32_SERVER
+  server.handleClient();
+#endif
+
+  if (currentGameIndex >= 0 && currentGameIndex < GAME_COUNT)
+    games[currentGameIndex].gameLoop();
+}
+
+// Setup functions
+void initCamera()
+{
   camera_config_t config;
   config.ledc_channel = LEDC_CHANNEL_0;
   config.ledc_timer = LEDC_TIMER_0;
@@ -105,8 +200,10 @@ void setup()
     sensor->set_saturation(sensor, -2);
   }
   sensor->set_framesize(sensor, FRAMESIZE_VGA);
+}
 
-  // Connect to WiFi
+void connectToWiFi()
+{
   WiFi.begin(ssid, password);
   WiFi.setSleep(false);
   Serial.print("WiFi connecting");
@@ -119,59 +216,78 @@ void setup()
 
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
-
-  // Endpoints
-  server.on("/config", HTTP_GET, handleConfig);
-  server.on("/stream", HTTP_GET, handleStream);
-  server.begin();
-  Serial.println("HTTP server started on port 80");
-
-  Serial.println("Use '/stream' to access the stream.");
-  Serial.println("Use '/config' to set config.");
 }
 
-void loop()
+// Arduino communication functions
+String readLine(int timeout)
 {
-  server.handleClient();
-
-  if (Serial2.available())
+  unsigned long start = millis();
+  String s;
+  while (millis() - start < timeout)
   {
-    String line = Serial2.readStringUntil('\n');
-    line.trim();
-    if (line.length())
+    if (Serial2.available())
     {
-      Serial.println("Received command: " + line);
-
-      // <camId> <action>
-      int sp = line.indexOf(' ');
-      if (sp < 0)
-      {
-        Serial2.println("ERROR");
-      }
-      else
-      {
-        int camId = line.substring(0, sp).toInt();
-        String action = line.substring(sp + 1);
-        String serverReply = getPythonData(action, camId);
-        Serial2.println(serverReply);
-      }
+      char c = Serial2.read();
+      if (c == '\n')
+        break;
+      s += c;
     }
-
-    while (Serial2.available())
-      Serial2.read();
   }
 
-  delay(10);
+  if (s.length() > 0 && s[s.length() - 1] == '\r')
+    s.remove(s.length() - 1, 1);
+
+  Serial.print("Received: ");
+  Serial.println(s);
+
+  return s;
 }
 
-String latestCommand = "";
-void changeConfig(String command)
+bool sendServoCommand(int a1, int a2, int a3)
 {
-  if (latestCommand == command)
+  while (Serial2.available())
+    Serial2.read();
+
+  Serial2.print('A');
+  Serial2.print(',');
+  Serial2.print(a1);
+  Serial2.print(',');
+  Serial2.print(a2);
+  Serial2.print(',');
+  Serial2.println(a3);
+
+  String resp = readLine(TIMEOUT_MS_SERVO);
+
+  return (resp == "OK");
+}
+
+bool sendStepperCommand(const int cmds[STEPPER_COUNT])
+{
+  while (Serial2.available())
+    Serial2.read();
+
+  Serial2.print('S');
+  for (int i = 0; i < STEPPER_COUNT; i++)
+  {
+    Serial2.print(',');
+    Serial2.print(cmds[i]);
+  }
+  Serial2.println();
+
+  String resp = readLine(TIMEOUT_MS_STEPPER);
+
+  return (resp == "OK");
+}
+
+// Change camera configuration
+String latestGame = "";
+void changeConfig(String game)
+{
+  if (latestGame == game)
     return;
 
-  latestCommand = command;
-  Serial.println("Changing config to: " + command);
+  latestGame = game;
+  Serial.println("Changing config to: " + game);
 
   sensor_t *s = esp_camera_sensor_get();
 
@@ -181,17 +297,140 @@ void changeConfig(String command)
   s->set_saturation(s, 0);
   analogWrite(LED_GPIO_NUM, 0);
 
-  if (command == "xo")
+  if (game == "xo")
   {
     s->set_framesize(s, FRAMESIZE_VGA);
     s->set_quality(s, 9);
     s->set_saturation(s, 2);
     analogWrite(LED_GPIO_NUM, 200);
   }
-  else if (command == "rubik")
+  else if (game == "rubik")
   {
     //
   }
+}
+
+// Server communication functions
+String getPythonData(String command)
+{
+  if (WiFi.status() != WL_CONNECTED)
+  {
+    Serial.println("WiFi not connected.");
+    return "ERROR";
+  }
+
+  camera_fb_t *fb = nullptr;
+
+  fb = esp_camera_fb_get();
+  if (!fb)
+  {
+    Serial.println("Camera capture failed");
+    return "ERROR";
+  }
+
+  HTTPClient http;
+  http.setTimeout(5000);
+  String fullUrl = String(serverEndpoint) + "?action=" + command;
+  http.begin(fullUrl);
+  http.addHeader("Content-Type", "image/jpeg");
+
+  int httpResponseCode = http.POST(fb->buf, fb->len);
+  String response = "";
+
+  if (httpResponseCode > 0)
+  {
+    response = http.getString();
+    if (response == "error")
+    {
+      Serial.println("POST failed. HTTP error code: " + String(httpResponseCode) + " - " + http.errorToString(httpResponseCode) + " - " + response);
+      response = "ERROR";
+    }
+    else
+    {
+      Serial.println("Server response: " + response);
+    }
+  }
+  else
+  {
+    Serial.println("POST failed. HTTP error code: " + String(httpResponseCode) + " - " + http.errorToString(httpResponseCode));
+    response = "ERROR";
+  }
+
+  http.end();
+
+  esp_camera_fb_return(fb);
+
+  return response;
+}
+
+// Game management functions
+void initGames()
+{
+  games[GAME_XO] = {"XO", startXOGame, xoGameLoop, stopXOGame};
+  games[GAME_RUBIK] = {"Rubik's Cube", startRubikGame, rubikGameLoop, stopRubikGame};
+  games[GAME_MEMORY] = {"Memory", startMemoryGame, memoryGameLoop, stopMemoryGame};
+  games[GAME_CUPS] = {"3 Cups", startCupsGame, cupsGameLoop, stopCupsGame};
+}
+
+void switchGame(int gameIndex)
+{
+  if (gameIndex < 0 || gameIndex >= GAME_COUNT)
+  {
+    Serial.println("Invalid game index");
+    return;
+  }
+
+  // Stop the current game if one is running
+  if (currentGameIndex >= 0 && currentGameIndex < GAME_COUNT)
+  {
+    Serial.print("Stopping game: ");
+    Serial.println(games[currentGameIndex].name);
+    games[currentGameIndex].stopGame();
+  }
+
+  if (gameIndex >= 0 && gameIndex < GAME_COUNT)
+  {
+    currentGameIndex = gameIndex;
+    Serial.print("Switching to game: ");
+    Serial.println(games[currentGameIndex].name);
+    games[currentGameIndex].startGame();
+  }
+  else
+  {
+    currentGameIndex = GAME_NONE;
+  }
+}
+
+// ESP32 Server Endpoints Handlers
+#if ENABLE_ESP32_SERVER
+void setupServerEndpoints()
+{
+#if ENABLE_SERVER_CONFIG
+  server.on("/config", HTTP_GET, handleConfig);
+#endif
+
+#if ENABLE_SERVER_STREAMING
+  server.on("/stream", HTTP_GET, handleStream);
+#endif
+
+#if ENABLE_SERVER_GAME_CHANGE
+  server.on("/changeGame", HTTP_GET, handleChangeGame);
+#endif
+
+  server.begin();
+  Serial.println("HTTP server started on port 80");
+
+#if ENABLE_SERVER_STREAMING
+  Serial.println("Use '/stream' to access the stream.");
+#endif
+
+#if ENABLE_SERVER_CONFIG
+  Serial.println("Use '/config' to set config.");
+#endif
+
+#if ENABLE_SERVER_GAME_CHANGE
+  Serial.println("Use '/changeGame?game=NAME' to switch games. Available games: xo, rubik, memory, cups, none.");
+#endif
 }
 
 bool toBool(String value)
@@ -200,6 +439,7 @@ bool toBool(String value)
   return (value == "1" || value == "true" || value == "on");
 }
 
+#if ENABLE_SERVER_CONFIG
 void handleConfig()
 {
   sensor_t *s = esp_camera_sensor_get();
@@ -270,7 +510,9 @@ void handleConfig()
 
   server.send(200, "text/plain", "Camera settings updated!");
 }
+#endif
 
+#if ENABLE_SERVER_STREAMING
 void handleStream()
 {
   WiFiClient client = server.client();
@@ -296,97 +538,54 @@ void handleStream()
     delay(30);
   }
 }
+#endif
 
-String getPythonData(String command, int camId)
+#if ENABLE_SERVER_GAME_CHANGE
+void handleChangeGame()
 {
-  if (WiFi.status() != WL_CONNECTED)
+  if (!server.hasArg("game"))
   {
-    Serial.println("WiFi not connected.");
-    return "ERROR";
+    server.send(400, "text/plain", "Missing 'game' parameter");
+    return;
   }
 
-  camera_fb_t *fb = nullptr;
+  String gameParam = server.arg("game");
+  int gameIndex = -1;
 
-  if (camId == 0)
+  if (gameParam == "xo")
+    gameIndex = GAME_XO;
+  else if (gameParam == "rubik")
+    gameIndex = GAME_RUBIK;
+  else if (gameParam == "memory")
+    gameIndex = GAME_MEMORY;
+  else if (gameParam == "cups")
+    gameIndex = GAME_CUPS;
+  else if (gameParam == "none")
+    gameIndex = GAME_NONE;
+
+  if (gameIndex >= GAME_NONE)
   {
-    changeConfig(command);
-
-    fb = esp_camera_fb_get();
-    if (!fb)
+    if (gameIndex == GAME_NONE)
     {
-      Serial.println("Camera capture failed");
-      return "ERROR";
-    }
-  }
-  else
-  {
-    HTTPClient httpGet;
-    httpGet.begin(slaveCamEndpoint);
-
-    int code = httpGet.GET();
-
-    if (code != 200)
-    {
-      Serial.println("Failed to get image from slave camera. HTTP code: " + String(code) + " - " + httpGet.errorToString(code));
-      httpGet.end();
-      return "ERROR";
-    }
-
-    WiFiClient *stream = httpGet.getStreamPtr();
-    size_t len = httpGet.getSize();
-
-    fb = (camera_fb_t *)malloc(sizeof(camera_fb_t));
-    fb->len = len;
-    fb->buf = (uint8_t *)malloc(len);
-
-    size_t idx = 0;
-    while (stream->available() && idx < len)
-    {
-      fb->buf[idx++] = stream->read();
-    }
-
-    httpGet.end();
-  }
-
-  HTTPClient http;
-  http.setTimeout(5000);
-  String fullUrl = String(serverEndpoint) + "?action=" + command;
-  http.begin(fullUrl);
-  http.addHeader("Content-Type", "image/jpeg");
-
-  int httpResponseCode = http.POST(fb->buf, fb->len);
-  String response = "";
-
-  if (httpResponseCode > 0)
-  {
-    response = http.getString();
-    if (response == "error")
-    {
-      Serial.println("POST failed. HTTP error code: " + String(httpResponseCode) + " - " + http.errorToString(httpResponseCode) + " - " + response);
-      response = "ERROR";
+      // Stop current game before setting to GAME_NONE
+      if (currentGameIndex >= 0 && currentGameIndex < GAME_COUNT)
+      {
+        games[currentGameIndex].stopGame();
+      }
+      currentGameIndex = GAME_NONE;
+      server.send(200, "text/plain", "All games stopped");
     }
     else
     {
-      Serial.println("Server response: " + response);
+      switchGame(gameIndex);
+      server.send(200, "text/plain", "Game switched to " + gameParam);
     }
   }
   else
   {
-    Serial.println("POST failed. HTTP error code: " + String(httpResponseCode) + " - " + http.errorToString(httpResponseCode));
-    response = "ERROR";
+    server.send(400, "text/plain", "Invalid game name. Use: xo, rubik, memory, cups or none");
   }
-
-  http.end();
-
-  if (camId == 0)
-  {
-    esp_camera_fb_return(fb);
-  }
-  else
-  {
-    free(fb->buf);
-    free(fb);
-  }
-
-  return response;
 }
+#endif
+
+#endif
