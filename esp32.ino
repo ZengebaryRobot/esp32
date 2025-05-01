@@ -1,6 +1,7 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
-#include <WebServer.h>
+#include <AsyncTCP.h>
+#include <ESPAsyncWebServer.h>
 #include "esp_camera.h"
 
 // Include game files
@@ -74,7 +75,7 @@ const char *serverEndpoint = "http://192.168.1.3:5000/process";
 
 // To get image from camera or change config
 #if ENABLE_ESP32_SERVER
-WebServer server(80);
+AsyncWebServer server(80);
 #endif
 
 // Camera configuration
@@ -103,15 +104,16 @@ void setupServerEndpoints();
 bool toBool(String value);
 
 #if ENABLE_SERVER_GAME_CHANGE
-void handleChangeGame();
+void handleChangeGame(AsyncWebServerRequest *request);
 #endif
 
 #if ENABLE_SERVER_CONFIG
-void handleConfig();
+void handleConfig(AsyncWebServerRequest *request);
 #endif
 
 #if ENABLE_SERVER_STREAMING
-void handleStream();
+void handleStream(AsyncWebServerRequest *request);
+void handleStreamJpg(AsyncWebServerRequest *request);
 #endif
 
 #endif
@@ -136,10 +138,6 @@ void setup()
 
 void loop()
 {
-#if ENABLE_ESP32_SERVER
-  server.handleClient();
-#endif
-
   if (currentGameIndex >= 0 && currentGameIndex < GAME_COUNT)
     games[currentGameIndex].gameLoop();
 }
@@ -411,6 +409,7 @@ void setupServerEndpoints()
 
 #if ENABLE_SERVER_STREAMING
   server.on("/stream", HTTP_GET, handleStream);
+  server.on("/streamjpg", HTTP_GET, handleStreamJpg);
 #endif
 
 #if ENABLE_SERVER_GAME_CHANGE
@@ -440,13 +439,13 @@ bool toBool(String value)
 }
 
 #if ENABLE_SERVER_CONFIG
-void handleConfig()
+void handleConfig(AsyncWebServerRequest *request)
 {
   sensor_t *s = esp_camera_sensor_get();
 
-  if (server.hasArg("framesize"))
+  if (request->hasParam("framesize"))
   {
-    String value = server.arg("framesize");
+    String value = request->getParam("framesize")->value();
     if (value == "QVGA")
       s->set_framesize(s, FRAMESIZE_QVGA);
     else if (value == "SVGA")
@@ -455,101 +454,140 @@ void handleConfig()
       s->set_framesize(s, FRAMESIZE_VGA);
   }
 
-  if (server.hasArg("quality"))
-    s->set_quality(s, server.arg("quality").toInt());
-  if (server.hasArg("contrast"))
-    s->set_contrast(s, server.arg("contrast").toInt());
-  if (server.hasArg("brightness"))
-    s->set_brightness(s, server.arg("brightness").toInt());
-  if (server.hasArg("saturation"))
-    s->set_saturation(s, server.arg("saturation").toInt());
-  if (server.hasArg("gainceiling"))
-    s->set_gainceiling(s, (gainceiling_t)server.arg("gainceiling").toInt());
+  if (request->hasParam("quality"))
+    s->set_quality(s, request->getParam("quality")->value().toInt());
+  if (request->hasParam("contrast"))
+    s->set_contrast(s, request->getParam("contrast")->value().toInt());
+  if (request->hasParam("brightness"))
+    s->set_brightness(s, request->getParam("brightness")->value().toInt());
+  if (request->hasParam("saturation"))
+    s->set_saturation(s, request->getParam("saturation")->value().toInt());
+  if (request->hasParam("gainceiling"))
+    s->set_gainceiling(s, (gainceiling_t)request->getParam("gainceiling")->value().toInt());
 
-  if (server.hasArg("colorbar"))
-    s->set_colorbar(s, toBool(server.arg("colorbar")));
-  if (server.hasArg("awb"))
-    s->set_whitebal(s, toBool(server.arg("awb")));
-  if (server.hasArg("agc"))
-    s->set_gain_ctrl(s, toBool(server.arg("agc")));
-  if (server.hasArg("aec"))
-    s->set_exposure_ctrl(s, toBool(server.arg("aec")));
-  if (server.hasArg("hmirror"))
-    s->set_hmirror(s, toBool(server.arg("hmirror")));
-  if (server.hasArg("vflip"))
-    s->set_vflip(s, toBool(server.arg("vflip")));
+  if (request->hasParam("colorbar"))
+    s->set_colorbar(s, toBool(request->getParam("colorbar")->value()));
+  if (request->hasParam("awb"))
+    s->set_whitebal(s, toBool(request->getParam("awb")->value()));
+  if (request->hasParam("agc"))
+    s->set_gain_ctrl(s, toBool(request->getParam("agc")->value()));
+  if (request->hasParam("aec"))
+    s->set_exposure_ctrl(s, toBool(request->getParam("aec")->value()));
+  if (request->hasParam("hmirror"))
+    s->set_hmirror(s, toBool(request->getParam("hmirror")->value()));
+  if (request->hasParam("vflip"))
+    s->set_vflip(s, toBool(request->getParam("vflip")->value()));
 
-  if (server.hasArg("awb_gain"))
-    s->set_awb_gain(s, server.arg("awb_gain").toInt());
-  if (server.hasArg("agc_gain"))
-    s->set_agc_gain(s, server.arg("agc_gain").toInt());
-  if (server.hasArg("aec_value"))
-    s->set_aec_value(s, server.arg("aec_value").toInt());
+  if (request->hasParam("awb_gain"))
+    s->set_awb_gain(s, request->getParam("awb_gain")->value().toInt());
+  if (request->hasParam("agc_gain"))
+    s->set_agc_gain(s, request->getParam("agc_gain")->value().toInt());
+  if (request->hasParam("aec_value"))
+    s->set_aec_value(s, request->getParam("aec_value")->value().toInt());
 
-  if (server.hasArg("aec2"))
-    s->set_aec2(s, toBool(server.arg("aec2")));
-  if (server.hasArg("dcw"))
-    s->set_dcw(s, toBool(server.arg("dcw")));
-  if (server.hasArg("bpc"))
-    s->set_bpc(s, toBool(server.arg("bpc")));
-  if (server.hasArg("wpc"))
-    s->set_wpc(s, toBool(server.arg("wpc")));
-  if (server.hasArg("raw_gma"))
-    s->set_raw_gma(s, toBool(server.arg("raw_gma")));
-  if (server.hasArg("lenc"))
-    s->set_lenc(s, toBool(server.arg("lenc")));
+  if (request->hasParam("aec2"))
+    s->set_aec2(s, toBool(request->getParam("aec2")->value()));
+  if (request->hasParam("dcw"))
+    s->set_dcw(s, toBool(request->getParam("dcw")->value()));
+  if (request->hasParam("bpc"))
+    s->set_bpc(s, toBool(request->getParam("bpc")->value()));
+  if (request->hasParam("wpc"))
+    s->set_wpc(s, toBool(request->getParam("wpc")->value()));
+  if (request->hasParam("raw_gma"))
+    s->set_raw_gma(s, toBool(request->getParam("raw_gma")->value()));
+  if (request->hasParam("lenc"))
+    s->set_lenc(s, toBool(request->getParam("lenc")->value()));
 
-  if (server.hasArg("ae_level"))
-    s->set_ae_level(s, server.arg("ae_level").toInt());
+  if (request->hasParam("ae_level"))
+    s->set_ae_level(s, request->getParam("ae_level")->value().toInt());
 
-  if (server.hasArg("led_intensity"))
+  if (request->hasParam("led_intensity"))
   {
-    int intensity = server.arg("led_intensity").toInt();
+    int intensity = request->getParam("led_intensity")->value().toInt();
     analogWrite(LED_GPIO_NUM, intensity);
   }
 
-  server.send(200, "text/plain", "Camera settings updated!");
+  request->send(200, "text/plain", "Camera settings updated!");
 }
 #endif
 
 #if ENABLE_SERVER_STREAMING
-void handleStream()
+void handleStream(AsyncWebServerRequest *request)
 {
-  WiFiClient client = server.client();
-  String header =
-      "HTTP/1.1 200 OK\r\n"
-      "Content-Type: multipart/x-mixed-replace; boundary=frame\r\n\r\n";
-  client.print(header);
+  request->send_P(200, "text/html",
+                  "<html><head><title>ESP32 Camera Stream</title>"
+                  "<script>"
+                  "window.onload = function() {"
+                  "  var img = document.getElementById('stream');"
+                  "  function updateImage() {"
+                  "    img.src = '/streamjpg?' + new Date().getTime();"
+                  "    setTimeout(updateImage, 100);"
+                  "  }"
+                  "  updateImage();"
+                  "}"
+                  "</script></head>"
+                  "<body><img src=\"/streamjpg\" id=\"stream\" width=\"640\" height=\"480\"></body></html>");
+}
 
-  while (client.connected())
+void handleStreamJpg(AsyncWebServerRequest *request)
+{
+  static unsigned long last_capture = 0;
+  unsigned long current_millis = millis();
+
+  if (current_millis - last_capture < 50)
   {
-    camera_fb_t *fb = esp_camera_fb_get();
-    if (!fb)
-    {
-      Serial.println("Camera capture failed");
-      break;
-    }
-    client.printf("--frame\r\nContent-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n", fb->len);
-    client.write(fb->buf, fb->len);
-    client.print("\r\n");
-    esp_camera_fb_return(fb);
-    if (!client.connected())
-      break;
-    delay(30);
+    delay(50);
   }
+
+  camera_fb_t *fb = esp_camera_fb_get();
+  if (!fb)
+  {
+    Serial.println("Camera capture failed in handleStreamJpg. Possible causes: camera not initialized, insufficient memory, or hardware issue");
+
+    sensor_t *s = esp_camera_sensor_get();
+    if (s)
+    {
+      s->set_framesize(s, FRAMESIZE_VGA);
+      delay(100);
+
+      // Try capture again
+      fb = esp_camera_fb_get();
+      if (!fb)
+      {
+        request->send(500, "text/plain", "Camera capture failed - Please restart device");
+        return;
+      }
+    }
+    else
+    {
+      request->send(500, "text/plain", "Camera sensor unavailable - Please restart device");
+      return;
+    }
+  }
+
+  last_capture = current_millis;
+
+  AsyncWebServerResponse *response = request->beginResponse_P(200, "image/jpeg", fb->buf, fb->len);
+  response->addHeader("Content-Disposition", "inline; filename=capture.jpg");
+  response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  response->addHeader("Pragma", "no-cache");
+  response->addHeader("Expires", "0");
+  request->send(response);
+
+  esp_camera_fb_return(fb);
 }
 #endif
 
 #if ENABLE_SERVER_GAME_CHANGE
-void handleChangeGame()
+void handleChangeGame(AsyncWebServerRequest *request)
 {
-  if (!server.hasArg("game"))
+  if (!request->hasParam("game"))
   {
-    server.send(400, "text/plain", "Missing 'game' parameter");
+    request->send(400, "text/plain", "Missing 'game' parameter");
     return;
   }
 
-  String gameParam = server.arg("game");
+  String gameParam = request->getParam("game")->value();
   int gameIndex = -1;
 
   if (gameParam == "xo")
@@ -567,23 +605,22 @@ void handleChangeGame()
   {
     if (gameIndex == GAME_NONE)
     {
-      // Stop current game before setting to GAME_NONE
       if (currentGameIndex >= 0 && currentGameIndex < GAME_COUNT)
       {
         games[currentGameIndex].stopGame();
       }
       currentGameIndex = GAME_NONE;
-      server.send(200, "text/plain", "All games stopped");
+      request->send(200, "text/plain", "All games stopped");
     }
     else
     {
       switchGame(gameIndex);
-      server.send(200, "text/plain", "Game switched to " + gameParam);
+      request->send(200, "text/plain", "Game switched to " + gameParam);
     }
   }
   else
   {
-    server.send(400, "text/plain", "Invalid game name. Use: xo, rubik, memory, cups or none");
+    request->send(400, "text/plain", "Invalid game name. Use: xo, rubik, memory, cups or none");
   }
 }
 #endif
