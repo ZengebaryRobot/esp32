@@ -15,6 +15,7 @@
 #define ENABLE_SERVER_STREAMING 1
 #define ENABLE_SERVER_CONFIG 1
 #define ENABLE_SERVER_GAME_CHANGE 1
+#define ENABLE_SERVER_GAME_INFO 1
 
 // Camera Pins
 #define PWDN_GPIO_NUM 32
@@ -105,6 +106,10 @@ bool toBool(String value);
 
 #if ENABLE_SERVER_GAME_CHANGE
 void handleChangeGame(AsyncWebServerRequest *request);
+#endif
+
+#if ENABLE_SERVER_GAME_INFO
+void handleGetCurrentGame(AsyncWebServerRequest *request);
 #endif
 
 #if ENABLE_SERVER_CONFIG
@@ -416,6 +421,10 @@ void setupServerEndpoints()
   server.on("/changeGame", HTTP_GET, handleChangeGame);
 #endif
 
+#if ENABLE_SERVER_GAME_INFO
+  server.on("/getCurrentGame", HTTP_GET, handleGetCurrentGame);
+#endif
+
   server.begin();
   Serial.println("HTTP server started on port 80");
 
@@ -429,6 +438,10 @@ void setupServerEndpoints()
 
 #if ENABLE_SERVER_GAME_CHANGE
   Serial.println("Use '/changeGame?game=NAME' to switch games. Available games: xo, rubik, memory, cups, none.");
+#endif
+
+#if ENABLE_SERVER_GAME_INFO
+  Serial.println("Use '/getCurrentGame' to get current game info.");
 #endif
 }
 
@@ -622,6 +635,24 @@ void handleChangeGame(AsyncWebServerRequest *request)
   {
     request->send(400, "text/plain", "Invalid game name. Use: xo, rubik, memory, cups or none");
   }
+}
+#endif
+
+#if ENABLE_SERVER_GAME_INFO
+void handleGetCurrentGame(AsyncWebServerRequest *request)
+{
+  String response;
+
+  if (currentGameIndex == GAME_NONE)
+  {
+    response = "None";
+  }
+  else
+  {
+    response = String(games[currentGameIndex].name);
+  }
+
+  request->send(200, "text/plain", response);
 }
 #endif
 
