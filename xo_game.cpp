@@ -11,6 +11,7 @@ void startXOGame()
 {
   Serial.println("Starting XO Game");
   changeConfig("xo");
+
   //
 }
 
@@ -48,6 +49,7 @@ void xoGameLoop()
 void stopXOGame()
 {
   Serial.println("Stopping XO Game");
+  changeConfig("none");
 
   //
 }

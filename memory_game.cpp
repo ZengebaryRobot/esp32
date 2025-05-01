@@ -21,6 +21,7 @@ void memoryGameLoop()
 void stopMemoryGame()
 {
   Serial.println("Stopping Memory Game");
+  changeConfig("none");
 
   //
 }

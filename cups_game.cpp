@@ -23,6 +23,7 @@ void cupsGameLoop()
 void stopCupsGame()
 {
   Serial.println("Stopping 3 Cups Game");
+  changeConfig("none");
 
   //
 }

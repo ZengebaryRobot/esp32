@@ -23,6 +23,7 @@ void rubikGameLoop()
 void stopRubikGame()
 {
   Serial.println("Stopping Rubik's Cube Game");
+  changeConfig("none");
 
   //
 }
