@@ -7,6 +7,7 @@ extern String getPythonData(String command);
 extern void parseCSV(const char *csv, int arr[], int &count);
 extern bool sendServoCommand(int a1, int a2, int a3);
 extern bool sendStepperCommand(const int cmds[]);
+extern void printOnLCD(const String &msg);
 
 void startXOGame()
 {
@@ -18,7 +19,6 @@ void startXOGame()
 
 void xoGameLoop()
 {
-  // Check for game state updates from Python server
   String response = "ERROR";
   while (response == "ERROR")
   {
@@ -45,6 +45,8 @@ void xoGameLoop()
     delay(1000);
   }
   Serial.println("Stepper command sent successfully");
+
+  printOnLCD("XO Game Running...");
 }
 
 void stopXOGame()

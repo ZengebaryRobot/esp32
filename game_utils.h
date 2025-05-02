@@ -8,5 +8,6 @@ void parseCSV(const char *csv, int arr[], int &count);
 bool sendServoCommand(int a1, int a2, int a3);
 bool sendStepperCommand(const int cmds[10]);
 void changeConfig(String command);
+void printOnLCD(const String &msg);
 
 #endif

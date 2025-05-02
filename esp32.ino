@@ -2,6 +2,7 @@
 #include <HTTPClient.h>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
+#include <LiquidCrystal_I2C.h>
 #include "esp_camera.h"
 
 // Include game files
@@ -16,6 +17,11 @@
 #define ENABLE_SERVER_CONFIG 1
 #define ENABLE_SERVER_GAME_CHANGE 1
 #define ENABLE_SERVER_GAME_INFO 1
+
+// LCD Display
+#define ENABLE_DISPLAY 1
+#define SDA_PIN 14
+#define SCL_PIN 15
 
 // Camera Pins
 #define PWDN_GPIO_NUM 32
@@ -80,6 +86,11 @@ const char *serverEndpoint = "http://192.168.1.3:5000/process";
 AsyncWebServer server(80);
 #endif
 
+// LCD Display
+#if ENABLE_DISPLAY
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+#endif
+
 // Camera configuration
 sensor_t *sensor = nullptr;
 
@@ -101,6 +112,11 @@ bool sendStepperCommand(const int cmds[10]);
 void changeConfig(String command);
 String getPythonData(String command);
 void parseCSV(const char *csv, int arr[], int &count);
+
+#if ENABLE_DISPLAY
+void initDisplay();
+void printOnLCD(const String &msg);
+#endif
 
 #if ENABLE_ESP32_SERVER
 void setupServerEndpoints();
@@ -137,6 +153,7 @@ void setup()
   initCamera();
   connectToWiFi();
   initGames();
+  initDisplay();
 
 #if ENABLE_ESP32_SERVER
   setupServerEndpoints();
@@ -383,6 +400,42 @@ void parseCSV(const char *csv, int arr[], int &count)
     token = strtok(NULL, ",");
   }
 }
+
+// LCD Display
+#if ENABLE_DISPLAY
+void initDisplay()
+{
+  Wire.begin(SDA_PIN, SCL_PIN);
+
+  lcd.init();
+  lcd.backlight();
+
+  lcd.clear();
+
+  lcd.setCursor(0, 0);
+  lcd.print("Ready!");
+}
+
+void printOnLCD(const String &msg)
+{
+  uint16_t len = msg.length();
+  if (len > 32)
+    len = 32;
+
+  lcd.setCursor(0, 0);
+  lcd.print(msg.substring(0, min<uint16_t>(len, 16)));
+
+  lcd.setCursor(0, 1);
+  if (len > 16)
+  {
+    lcd.print(msg.substring(16, len));
+  }
+  else
+  {
+    lcd.print("                ");
+  }
+}
+#endif
 
 // Game management functions
 void initGames()
