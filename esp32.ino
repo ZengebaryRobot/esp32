@@ -69,8 +69,8 @@ Game games[GAME_COUNT];
 int currentGameIndex = GAME_NONE;
 
 // Wifi credentials
-const char *ssid = "AS";
-const char *password = "#$ahSB#$135#$";
+const char *ssid = "Zengebary";
+const char *password = "1234abcdABCD";
 
 // Main server endpoint
 const char *serverEndpoint = "http://192.168.1.3:5000/process";
