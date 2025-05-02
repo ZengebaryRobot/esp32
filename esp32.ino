@@ -42,6 +42,7 @@
 #define STEPPER_COUNT 10
 #define TIMEOUT_MS_SERVO 5000
 #define TIMEOUT_MS_STEPPER 5000
+#define MAX_SIZE 30
 
 // Game management
 enum GameType
@@ -99,6 +100,7 @@ bool sendStepperCommand(const int cmds[10]);
 
 void changeConfig(String command);
 String getPythonData(String command);
+void parseCSV(const char *csv, int arr[], int &count);
 
 #if ENABLE_ESP32_SERVER
 void setupServerEndpoints();
@@ -364,6 +366,22 @@ String getPythonData(String command)
   esp_camera_fb_return(fb);
 
   return response;
+}
+
+void parseCSV(const char *csv, int arr[], int &count)
+{
+  count = 0;
+  char buffer[256];
+  strncpy(buffer, csv, sizeof(buffer));
+  buffer[sizeof(buffer) - 1] = '\0';
+
+  char *token = strtok(buffer, ",");
+
+  while (token != NULL && count < MAX_SIZE)
+  {
+    arr[count++] = atoi(token);
+    token = strtok(NULL, ",");
+  }
 }
 
 // Game management functions
