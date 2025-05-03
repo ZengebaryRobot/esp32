@@ -10,4 +10,14 @@ bool sendStepperCommand(const int cmds[10]);
 void changeConfig(String command);
 void printOnLCD(const String &msg);
 
+// Arm enum
+enum ArmMotor
+{
+  BASE = 0,
+  SHOULDER = 1,
+  ELBOW = 2,
+  WRIST = 3,
+  GRIP = 4
+};
+
 #endif
