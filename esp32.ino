@@ -371,10 +371,10 @@ void changeConfig(String game)
   }
   else if (game == "memory")
   {
-    s->set_framesize(s, (framesize_t)10);
-    s->set_quality(s, 9);
-    s->set_contrast(s, 0);
-    s->set_brightness(s, 0);
+    s->set_framesize(s, (framesize_t)13);
+    s->set_quality(s, 10);
+    s->set_contrast(s, 2);
+    s->set_brightness(s, -2);
     s->set_saturation(s, 0);
     s->set_gainceiling(s, (gainceiling_t)0);
     s->set_colorbar(s, 0);
@@ -385,17 +385,17 @@ void changeConfig(String game)
     s->set_vflip(s, 0);
     s->set_awb_gain(s, 1);
     s->set_agc_gain(s, 0);
-    s->set_aec_value(s, 168);
+    s->set_aec_value(s, 1200);
     s->set_aec2(s, 1);
     s->set_dcw(s, 1);
     s->set_bpc(s, 1);
     s->set_wpc(s, 1);
     s->set_raw_gma(s, 1);
     s->set_lenc(s, 1);
-    s->set_special_effect(s, 0);
+    s->set_special_effect(s, 2);
     s->set_wb_mode(s, 0);
-    s->set_ae_level(s, 0);
-    analogWrite(LED_GPIO_NUM, 0);
+    s->set_ae_level(s, 2);
+    analogWrite(LED_GPIO_NUM, 136);
   }
   else if (game == "cups")
   {
