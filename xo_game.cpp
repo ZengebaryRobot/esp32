@@ -47,9 +47,9 @@ typedef struct
   int score;
 } Move;
 
-int stackCounter = 4;
-int turn = PLAYER_X;
-bool gameEnded = false;
+static int stackCounter = 4;
+static int turn = PLAYER_X;
+static bool gameEnded = false;
 
 void startXOGame()
 {
@@ -68,7 +68,7 @@ void startXOGame()
       lastBoard[i][j] = EMPTY;
 }
 
-void executeServoMove(ArmMotor motor, int angle, int overShoot)
+void xoExecuteServoMove(ArmMotor motor, int angle, int overShoot)
 {
   while (true)
   {
@@ -81,25 +81,25 @@ void executeServoMove(ArmMotor motor, int angle, int overShoot)
   }
 }
 
-void goGrab(int requiredBaseAngle, int requiredShoulderAngle, int requiredElbowAngle, int requiredWristAngle)
+void xoGoGrab(int requiredBaseAngle, int requiredShoulderAngle, int requiredElbowAngle, int requiredWristAngle)
 {
-  executeServoMove(ArmMotor::GRIP, GRIP_OPEN, 0);
-  executeServoMove(ArmMotor::SHOULDER, DEFAULT_ANGLE_SHOULDER, 10);
-  executeServoMove(ArmMotor::BASE, requiredBaseAngle, 0);
-  executeServoMove(ArmMotor::WRIST, requiredWristAngle, 4);
-  executeServoMove(ArmMotor::ELBOW, requiredElbowAngle, 0);
-  executeServoMove(ArmMotor::SHOULDER, requiredShoulderAngle, 10);
-  executeServoMove(ArmMotor::GRIP, GRIP_CLOSED, 0);
+  xoExecuteServoMove(ArmMotor::GRIP, GRIP_OPEN, 0);
+  xoExecuteServoMove(ArmMotor::SHOULDER, DEFAULT_ANGLE_SHOULDER, 10);
+  xoExecuteServoMove(ArmMotor::BASE, requiredBaseAngle, 0);
+  xoExecuteServoMove(ArmMotor::WRIST, requiredWristAngle, 4);
+  xoExecuteServoMove(ArmMotor::ELBOW, requiredElbowAngle, 0);
+  xoExecuteServoMove(ArmMotor::SHOULDER, requiredShoulderAngle, 10);
+  xoExecuteServoMove(ArmMotor::GRIP, GRIP_CLOSED, 0);
 }
 
-bool goRelease(int requiredBaseAngle, int requiredShoulderAngle, int requiredElbowAngle, int requiredWristAngle)
+bool xoGoRelease(int requiredBaseAngle, int requiredShoulderAngle, int requiredElbowAngle, int requiredWristAngle)
 {
-  executeServoMove(ArmMotor::SHOULDER, DEFAULT_ANGLE_SHOULDER, 10);
-  executeServoMove(ArmMotor::BASE, requiredBaseAngle, 0);
-  executeServoMove(ArmMotor::WRIST, requiredWristAngle, 4);
-  executeServoMove(ArmMotor::ELBOW, requiredElbowAngle, 0);
-  executeServoMove(ArmMotor::SHOULDER, requiredShoulderAngle, 10);
-  executeServoMove(ArmMotor::GRIP, GRIP_OPEN, 0);
+  xoExecuteServoMove(ArmMotor::SHOULDER, DEFAULT_ANGLE_SHOULDER, 10);
+  xoExecuteServoMove(ArmMotor::BASE, requiredBaseAngle, 0);
+  xoExecuteServoMove(ArmMotor::WRIST, requiredWristAngle, 4);
+  xoExecuteServoMove(ArmMotor::ELBOW, requiredElbowAngle, 0);
+  xoExecuteServoMove(ArmMotor::SHOULDER, requiredShoulderAngle, 10);
+  xoExecuteServoMove(ArmMotor::GRIP, GRIP_OPEN, 0);
 }
 
 void getAnglesForCell(int x, int y, int angles[4])
@@ -326,9 +326,9 @@ void xoGameLoop()
     int ang[4];
     getAnglesForCell(mv.row, mv.col, ang);
 
-    goGrab(stackAngleData[stackCounter][0], stackAngleData[stackCounter][1], stackAngleData[stackCounter][2], stackAngleData[stackCounter][3]);
+    xoGoGrab(stackAngleData[stackCounter][0], stackAngleData[stackCounter][1], stackAngleData[stackCounter][2], stackAngleData[stackCounter][3]);
     delay(1000);
-    goRelease(ang[0], ang[1], ang[2], ang[3]);
+    xoGoRelease(ang[0], ang[1], ang[2], ang[3]);
 
     printBoard();
 
