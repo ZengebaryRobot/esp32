@@ -653,12 +653,7 @@ void handleConfig(AsyncWebServerRequest *request)
   if (request->hasParam("framesize"))
   {
     String value = request->getParam("framesize")->value();
-    if (value == "QVGA")
-      s->set_framesize(s, FRAMESIZE_QVGA);
-    else if (value == "SVGA")
-      s->set_framesize(s, FRAMESIZE_SVGA);
-    else if (value == "VGA")
-      s->set_framesize(s, FRAMESIZE_VGA);
+    s->set_framesize(s, value.toInt());
   }
 
   if (request->hasParam("quality"))
