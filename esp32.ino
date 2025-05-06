@@ -4,6 +4,50 @@
 #include <ESPAsyncWebServer.h>
 #include <LiquidCrystal_I2C.h>
 #include "esp_camera.h"
+#include "stream_handler.h"
+
+// Define streaming constants
+#define PART_BOUNDARY "123456789000000000000987654321"
+#define _STREAM_CONTENT_TYPE "multipart/x-mixed-replace;boundary=" PART_BOUNDARY
+#define _STREAM_BOUNDARY "\r\n--" PART_BOUNDARY "\r\n"
+#define _STREAM_PART "Content-Type: image/jpeg\r\nContent-Length: %u\r\nX-Timestamp: %d.%06d\r\n\r\n"
+
+// Running average filter for frame rate calculation
+typedef struct {
+    uint32_t size;
+    uint32_t index;
+    uint32_t count;
+    uint32_t total;
+    uint32_t *values;
+} ra_filter_t;
+
+static ra_filter_t ra_filter;
+
+static uint32_t ra_filter_run(ra_filter_t *filter, uint32_t value) {
+    if (!filter->values) {
+        return value;
+    }
+    filter->total -= filter->values[filter->index];
+    filter->values[filter->index] = value;
+    filter->total += filter->values[filter->index];
+    filter->index = (filter->index + 1) % filter->size;
+    if (filter->count < filter->size) {
+        filter->count++;
+    }
+    return filter->total / filter->count;
+}
+
+static esp_err_t ra_filter_init(ra_filter_t *filter, size_t size) {
+    filter->size = size;
+    filter->index = 0;
+    filter->count = 0;
+    filter->total = 0;
+    filter->values = (uint32_t *)calloc(size, sizeof(uint32_t));
+    if (!filter->values) {
+        return ESP_ERR_NO_MEM;
+    }
+    return ESP_OK;
+}
 
 // Include game files
 #include "xo_game.h"
@@ -81,7 +125,7 @@ const char *password = "1234abcdABCD";
 // Main server endpoint
 const char *serverEndpoint = "http://192.168.1.3:5000/process";
 
-// To get image from camera or change config
+// HTTP server
 #if ENABLE_ESP32_SERVER
 AsyncWebServer server(80);
 #endif
@@ -608,6 +652,13 @@ void setupServerEndpoints()
 #endif
 
 #if ENABLE_SERVER_STREAMING
+
+  if (start_stream_server()) {
+    Serial.println("ESP-IDF streaming server started on port 81");
+  } else {
+    Serial.println("Failed to start ESP-IDF streaming server");
+  }
+
   server.on("/stream", HTTP_GET, handleStream);
   server.on("/streamjpg", HTTP_GET, handleStreamJpg);
 #endif
@@ -717,19 +768,7 @@ void handleConfig(AsyncWebServerRequest *request)
 #if ENABLE_SERVER_STREAMING
 void handleStream(AsyncWebServerRequest *request)
 {
-  request->send_P(200, "text/html",
-                  "<html><head><title>ESP32 Camera Stream</title>"
-                  "<script>"
-                  "window.onload = function() {"
-                  "  var img = document.getElementById('stream');"
-                  "  function updateImage() {"
-                  "    img.src = '/streamjpg?' + new Date().getTime();"
-                  "    setTimeout(updateImage, 100);"
-                  "  }"
-                  "  updateImage();"
-                  "}"
-                  "</script></head>"
-                  "<body><img src=\"/streamjpg\" id=\"stream\" width=\"640\" height=\"480\"></body></html>");
+  request->redirect("http://" + WiFi.localIP().toString() + ":81/stream");
 }
 
 void handleStreamJpg(AsyncWebServerRequest *request)
@@ -833,5 +872,4 @@ void handleGetCurrentGame(AsyncWebServerRequest *request)
   request->send(200, "text/plain", response);
 }
 #endif
-
 #endif
