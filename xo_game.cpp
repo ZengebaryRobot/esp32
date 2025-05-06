@@ -18,6 +18,18 @@ extern void printOnLCD(const String &msg);
 #define GRIP_OPEN 100
 #define DEFAULT_ANGLE_SHOULDER 90
 
+// Define game states
+enum GameState
+{
+  GAME_INIT,
+  ROBOT_THINKING,
+  ROBOT_GRABBING,
+  ROBOT_PLACING,
+  WAITING_FOR_PLAYER,
+  CAPTURING_BOARD,
+  GAME_OVER
+};
+
 int board[3][3] = {
     {EMPTY, EMPTY, EMPTY},
     {EMPTY, EMPTY, EMPTY},
@@ -51,6 +63,17 @@ static int stackCounter = 4;
 static int turn = PLAYER_X;
 static bool gameEnded = false;
 
+// State machine variables
+static GameState currentState = GAME_INIT;
+static unsigned long stateStartTime = 0;
+static unsigned long lastActionTime = 0;
+static int servoMoveIndex = 0;
+static int currentMotor = 0;
+static int targetAngle = 0;
+static int overShootValue = 0;
+static Move robotMove = {-1, -1, 0};
+static int moveAngles[4] = {0};
+
 void startXOGame()
 {
   Serial.println("Starting XO Game");
@@ -66,40 +89,92 @@ void startXOGame()
   for (int i = 0; i < 3; i++)
     for (int j = 0; j < 3; j++)
       lastBoard[i][j] = EMPTY;
+
+  currentState = GAME_INIT;
+  stateStartTime = millis();
 }
 
-void xoExecuteServoMove(ArmMotor motor, int angle, int overShoot)
+bool xoExecuteServoMove(ArmMotor motor, int angle, int overShoot)
 {
-  while (true)
+  if (sendServoCommand(motor, angle, overShoot))
   {
-    if (sendServoCommand(motor, angle, overShoot))
-      break;
+    return true;
+  }
 
-    Serial.println("Servo command failed, retrying...");
+  Serial.println("Servo command failed, will retry...");
+  return false;
+}
 
-    delay(500);
+// State machine servo move sequence setup
+void setupServoMoveSequence(int baseAngle, int shoulderAngle, int elbowAngle, int wristAngle, bool isGrabbing)
+{
+  servoMoveIndex = 0;
+  moveAngles[0] = baseAngle;
+  moveAngles[1] = shoulderAngle;
+  moveAngles[2] = elbowAngle;
+  moveAngles[3] = wristAngle;
+
+  if (isGrabbing)
+  {
+    currentMotor = ArmMotor::GRIP;
+    targetAngle = GRIP_OPEN;
+    overShootValue = 0;
+  }
+  else
+  {
+    currentMotor = ArmMotor::SHOULDER;
+    targetAngle = DEFAULT_ANGLE_SHOULDER;
+    overShootValue = 10;
   }
 }
 
-void xoGoGrab(int requiredBaseAngle, int requiredShoulderAngle, int requiredElbowAngle, int requiredWristAngle)
+// Process one servo move step in the sequence
+bool processServoMoveStep()
 {
-  xoExecuteServoMove(ArmMotor::GRIP, GRIP_OPEN, 0);
-  xoExecuteServoMove(ArmMotor::SHOULDER, DEFAULT_ANGLE_SHOULDER, 10);
-  xoExecuteServoMove(ArmMotor::BASE, requiredBaseAngle, 0);
-  xoExecuteServoMove(ArmMotor::WRIST, requiredWristAngle, 4);
-  xoExecuteServoMove(ArmMotor::ELBOW, requiredElbowAngle, 0);
-  xoExecuteServoMove(ArmMotor::SHOULDER, requiredShoulderAngle, 10);
-  xoExecuteServoMove(ArmMotor::GRIP, GRIP_CLOSED, 0);
-}
+  if (millis() - lastActionTime < 200)
+  {
+    return false; // Wait a little between commands
+  }
 
-bool xoGoRelease(int requiredBaseAngle, int requiredShoulderAngle, int requiredElbowAngle, int requiredWristAngle)
-{
-  xoExecuteServoMove(ArmMotor::SHOULDER, DEFAULT_ANGLE_SHOULDER, 10);
-  xoExecuteServoMove(ArmMotor::BASE, requiredBaseAngle, 0);
-  xoExecuteServoMove(ArmMotor::WRIST, requiredWristAngle, 4);
-  xoExecuteServoMove(ArmMotor::ELBOW, requiredElbowAngle, 0);
-  xoExecuteServoMove(ArmMotor::SHOULDER, requiredShoulderAngle, 10);
-  xoExecuteServoMove(ArmMotor::GRIP, GRIP_OPEN, 0);
+  lastActionTime = millis();
+
+  bool success = xoExecuteServoMove((ArmMotor)currentMotor, targetAngle, overShootValue);
+  if (success)
+  {
+    servoMoveIndex++;
+
+    switch (servoMoveIndex)
+    {
+    case 1: // After grip open/shoulder default
+      currentMotor = (currentMotor == ArmMotor::GRIP) ? ArmMotor::SHOULDER : ArmMotor::BASE;
+      targetAngle = (currentMotor == ArmMotor::SHOULDER) ? DEFAULT_ANGLE_SHOULDER : moveAngles[0];
+      overShootValue = (currentMotor == ArmMotor::SHOULDER) ? 10 : 0;
+      break;
+    case 2: // After shoulder default/base
+      currentMotor = (currentMotor == ArmMotor::SHOULDER) ? ArmMotor::BASE : ArmMotor::WRIST;
+      targetAngle = (currentMotor == ArmMotor::BASE) ? moveAngles[0] : moveAngles[3];
+      overShootValue = (currentMotor == ArmMotor::BASE) ? 0 : 4;
+      break;
+    case 3: // After base/wrist
+      currentMotor = (currentMotor == ArmMotor::BASE) ? ArmMotor::WRIST : ArmMotor::ELBOW;
+      targetAngle = (currentMotor == ArmMotor::WRIST) ? moveAngles[3] : moveAngles[2];
+      overShootValue = (currentMotor == ArmMotor::WRIST) ? 4 : 0;
+      break;
+    case 4: // After wrist/elbow
+      currentMotor = (currentMotor == ArmMotor::WRIST) ? ArmMotor::ELBOW : ArmMotor::SHOULDER;
+      targetAngle = (currentMotor == ArmMotor::ELBOW) ? moveAngles[2] : moveAngles[1];
+      overShootValue = (currentMotor == ArmMotor::ELBOW) ? 0 : 10;
+      break;
+    case 5: // After elbow/shoulder
+      currentMotor = (currentMotor == ArmMotor::ELBOW) ? ArmMotor::SHOULDER : ArmMotor::GRIP;
+      targetAngle = (currentMotor == ArmMotor::SHOULDER) ? moveAngles[1] : (currentState == ROBOT_GRABBING ? GRIP_CLOSED : GRIP_OPEN);
+      overShootValue = (currentMotor == ArmMotor::SHOULDER) ? 10 : 0;
+      break;
+    case 6:        // After shoulder/grip
+      return true; // Sequence complete
+    }
+  }
+  return false; // Sequence not complete yet
 }
 
 void getAnglesForCell(int x, int y, int angles[4])
@@ -310,41 +385,113 @@ bool extractPlayableGrid(int cameraData[], uint8_t count)
 void xoGameLoop()
 {
   if (gameEnded)
-    return;
-
-  if (turn == PLAYER_X)
   {
-    Serial.println("Player X Move: ");
-    Move mv = findBestMove();
-    board[mv.row][mv.col] = PLAYER_X;
-    lastBoard[mv.row][mv.col] = PLAYER_X;
-    Serial.print("X → Row ");
-    Serial.print(mv.row);
-    Serial.print(", Col ");
-    Serial.println(mv.col);
-
-    int ang[4];
-    getAnglesForCell(mv.row, mv.col, ang);
-
-    xoGoGrab(stackAngleData[stackCounter][0], stackAngleData[stackCounter][1], stackAngleData[stackCounter][2], stackAngleData[stackCounter][3]);
-    delay(1000);
-    xoGoRelease(ang[0], ang[1], ang[2], ang[3]);
-
-    printBoard();
-
-    if (--stackCounter < 0)
+    if (currentState != GAME_OVER)
     {
-      Serial.println("Stack underflow");
-      gameEnded = true;
-      return;
+      currentState = GAME_OVER;
+      printOnLCD("Game Over");
     }
-    turn = PLAYER_O;
+    return;
   }
-  else
-  {
-    Serial.println("Player O Move: ");
-    delay(4000);
 
+  unsigned long currentTime = millis();
+
+  switch (currentState)
+  {
+  case GAME_INIT:
+    // Initialize game state
+    if (currentTime - stateStartTime > 500)
+    {
+      printOnLCD("XO Game Started");
+      if (turn == PLAYER_X)
+      {
+        currentState = ROBOT_THINKING;
+      }
+      else
+      {
+        currentState = WAITING_FOR_PLAYER;
+      }
+      stateStartTime = currentTime;
+    }
+    break;
+
+  case ROBOT_THINKING:
+    // Calculate robot's move
+    robotMove = findBestMove();
+    board[robotMove.row][robotMove.col] = PLAYER_X;
+    lastBoard[robotMove.row][robotMove.col] = PLAYER_X;
+
+    Serial.print("X → Row ");
+    Serial.print(robotMove.row);
+    Serial.print(", Col ");
+    Serial.println(robotMove.col);
+
+    // Setup for grabbing phase
+    setupServoMoveSequence(
+        stackAngleData[stackCounter][0],
+        stackAngleData[stackCounter][1],
+        stackAngleData[stackCounter][2],
+        stackAngleData[stackCounter][3],
+        true);
+
+    currentState = ROBOT_GRABBING;
+    stateStartTime = currentTime;
+    printOnLCD("Robot's turn...");
+    break;
+
+  case ROBOT_GRABBING:
+    // Execute grabbing sequence
+    if (processServoMoveStep())
+    {
+      // Grabbing complete, prepare to place piece
+      getAnglesForCell(robotMove.row, robotMove.col, moveAngles);
+      setupServoMoveSequence(
+          moveAngles[0],
+          moveAngles[1],
+          moveAngles[2],
+          moveAngles[3],
+          false);
+
+      currentState = ROBOT_PLACING;
+      stateStartTime = currentTime;
+    }
+    break;
+
+  case ROBOT_PLACING:
+    // Execute placing sequence
+    if (processServoMoveStep())
+    {
+      // Placing complete
+      if (--stackCounter < 0)
+      {
+        Serial.println("Stack underflow");
+        gameEnded = true;
+        currentState = GAME_OVER;
+      }
+      else
+      {
+        printBoard();
+        turn = PLAYER_O;
+        currentState = WAITING_FOR_PLAYER;
+        stateStartTime = currentTime;
+        printOnLCD("Your turn...");
+      }
+    }
+    break;
+
+  case WAITING_FOR_PLAYER:
+    // Wait for player to make a move
+    if (currentTime - stateStartTime > 4000)
+    { // Wait a bit before checking camera
+      currentState = CAPTURING_BOARD;
+      stateStartTime = currentTime;
+    }
+    break;
+
+  case CAPTURING_BOARD:
+  {
+    // Enclose this case block in braces to scope the variable
+    Serial.println("Player O Move: ");
     String res = getPythonData("xo");
 
     if (res != "ERROR")
@@ -356,42 +503,70 @@ void xoGameLoop()
       if (extractPlayableGrid(cam, cnt))
       {
         Serial.println("Grid extracted correctly");
+
+        if (isValidOpponentMove())
+        {
+          for (int i = 0; i < 3; i++)
+            for (int j = 0; j < 3; j++)
+              lastBoard[i][j] = board[i][j];
+
+          Serial.println("Player O moved correctly");
+          printBoard();
+          turn = PLAYER_X;
+          currentState = ROBOT_THINKING;
+        }
+        else
+        {
+          // Invalid move, wait and try again
+          currentState = WAITING_FOR_PLAYER;
+          stateStartTime = millis() + 2000; // Wait a bit before retrying
+          printOnLCD("Invalid move!");
+        }
       }
-
-      if (isValidOpponentMove())
+      else
       {
-        for (int i = 0; i < 3; i++)
-          for (int j = 0; j < 3; j++)
-            lastBoard[i][j] = board[i][j];
-
-        Serial.println("Player O moved correctly");
-        printBoard();
-        turn = PLAYER_X;
+        // Couldn't extract grid, retry
+        currentState = WAITING_FOR_PLAYER;
+        stateStartTime = millis() + 1000;
       }
     }
     else
     {
       Serial.println("Camera failed");
+      currentState = WAITING_FOR_PLAYER;
+      stateStartTime = millis() + 1000;
+      printOnLCD("Camera error!");
     }
-
-    delay(1000);
+    break;
   }
 
-  int res = evaluateResult(PLAYER_X, PLAYER_O);
-  if (res == 10)
-  {
-    Serial.println("I win");
-    gameEnded = true;
+  case GAME_OVER:
+    // Game has ended
+    break;
   }
-  else if (res == -10)
+
+  // Check for game result in any state
+  if (currentState != GAME_OVER)
   {
-    Serial.println("I lose");
-    gameEnded = true;
-  }
-  else if (isBoardFull())
-  {
-    Serial.println("Tie");
-    gameEnded = true;
+    int res = evaluateResult(PLAYER_X, PLAYER_O);
+    if (res == 10)
+    {
+      Serial.println("I win");
+      gameEnded = true;
+      printOnLCD("Robot wins!");
+    }
+    else if (res == -10)
+    {
+      Serial.println("I lose");
+      gameEnded = true;
+      printOnLCD("You win!");
+    }
+    else if (isBoardFull())
+    {
+      Serial.println("Tie");
+      gameEnded = true;
+      printOnLCD("It's a tie!");
+    }
   }
 }
 
@@ -399,6 +574,6 @@ void stopXOGame()
 {
   Serial.println("Stopping XO Game");
   changeConfig("none");
-
-  //
+  gameEnded = true;
+  currentState = GAME_OVER;
 }

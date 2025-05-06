@@ -153,7 +153,8 @@ void setup()
   initCamera();
   connectToWiFi();
   initGames();
-  initDisplay();
+  changeConfig("none");
+  //initDisplay();
 
 #if ENABLE_ESP32_SERVER
   setupServerEndpoints();
@@ -653,7 +654,7 @@ void handleConfig(AsyncWebServerRequest *request)
   if (request->hasParam("framesize"))
   {
     String value = request->getParam("framesize")->value();
-    s->set_framesize(s, value.toInt());
+    s->set_framesize(s, (framesize_t) value.toInt());
   }
 
   if (request->hasParam("quality"))
@@ -746,23 +747,11 @@ void handleStreamJpg(AsyncWebServerRequest *request)
   {
     Serial.println("Camera capture failed in handleStreamJpg. Possible causes: camera not initialized, insufficient memory, or hardware issue");
 
-    sensor_t *s = esp_camera_sensor_get();
-    if (s)
+    // Try capture again
+    fb = esp_camera_fb_get();
+    if (!fb)
     {
-      s->set_framesize(s, FRAMESIZE_VGA);
-      delay(100);
-
-      // Try capture again
-      fb = esp_camera_fb_get();
-      if (!fb)
-      {
-        request->send(500, "text/plain", "Camera capture failed - Please restart device");
-        return;
-      }
-    }
-    else
-    {
-      request->send(500, "text/plain", "Camera sensor unavailable - Please restart device");
+      request->send(500, "text/plain", "Camera capture failed - Please restart device");
       return;
     }
   }
