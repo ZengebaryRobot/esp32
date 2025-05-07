@@ -53,7 +53,7 @@ static esp_err_t ra_filter_init(ra_filter_t *filter, size_t size) {
 #include "xo_game.h"
 #include "rubik_game.h"
 #include "memory_game.h"
-#include "cups_game.h"
+#include "threeCups_game.h"
 
 // Enable ESP32 server
 #define ENABLE_ESP32_SERVER 1

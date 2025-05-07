@@ -297,6 +297,7 @@ bool updateArmMove()
         }
         break;
 
+
     case MOVE_IDLE:
     case MOVE_COMPLETE:
         return true; // Nothing to do, consider it complete
