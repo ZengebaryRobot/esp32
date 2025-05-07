@@ -82,6 +82,15 @@ void startXOGame()
   Serial.println("Starting XO Game");
   changeConfig("xo");
 
+  whlie(true){  // might add some delay to avoid spinning
+    bool success = xoExecuteServoMove(ArmMotor::GRIP, GRIP_OPEN);
+    if (success)
+    {
+      break; 
+    }
+    Serial.println("Retrying servo command for grip open...");
+  }
+
   gameEnded = false;
   turn = PLAYER_X;
   stackCounter = 4;
@@ -109,7 +118,7 @@ bool xoExecuteServoMove(ArmMotor motor, int angle)
 }
 
 // State machine servo move sequence setup
-void setupServoMoveSequence(int baseAngle, int shoulderAngle, int elbowAngle, int wristAngle, bool isGrabbing)
+void setupServoMoveSequence(int baseAngle, int shoulderAngle, int elbowAngle, int wristAngle)
 {
   servoMoveIndex = 0;
   moveAngles[0] = baseAngle;
@@ -117,16 +126,10 @@ void setupServoMoveSequence(int baseAngle, int shoulderAngle, int elbowAngle, in
   moveAngles[2] = elbowAngle;
   moveAngles[3] = wristAngle;
 
-  if (isGrabbing)
-  {
-    currentMotor = ArmMotor::GRIP;
-    targetAngle = GRIP_OPEN;
-  }
-  else
-  {
-    currentMotor = ArmMotor::SHOULDER;
-    targetAngle = DEFAULT_ANGLE_SHOULDER;
-  }
+  
+  currentMotor = ArmMotor::SHOULDER;
+  targetAngle = DEFAULT_ANGLE_SHOULDER;
+  
 }
 
 // Process one servo move step in the sequence
@@ -146,27 +149,27 @@ bool processServoMoveStep()
 
     switch (servoMoveIndex)
     {
-    case 1: // After grip open/shoulder default
-      currentMotor = (currentMotor == ArmMotor::GRIP) ? ArmMotor::SHOULDER : ArmMotor::BASE;
-      targetAngle = (currentMotor == ArmMotor::SHOULDER) ? DEFAULT_ANGLE_SHOULDER : moveAngles[0];
+    case 1: // After shoulder default
+      currentMotor = ArmMotor::BASE;
+      targetAngle = moveAngles[0];
       break;
-    case 2: // After shoulder default/base
-      currentMotor = (currentMotor == ArmMotor::SHOULDER) ? ArmMotor::BASE : ArmMotor::WRIST;
-      targetAngle = (currentMotor == ArmMotor::BASE) ? moveAngles[0] : moveAngles[3];
+    case 2: // After base
+      currentMotor = ArmMotor::WRIST;
+      targetAngle = moveAngles[3];
       break;
-    case 3: // After base/wrist
-      currentMotor = (currentMotor == ArmMotor::BASE) ? ArmMotor::WRIST : ArmMotor::ELBOW;
-      targetAngle = (currentMotor == ArmMotor::WRIST) ? moveAngles[3] : moveAngles[2];
+    case 3: // After wrist
+      currentMotor = ArmMotor::ELBOW;
+      targetAngle = moveAngles[2];
       break;
-    case 4: // After wrist/elbow
-      currentMotor = (currentMotor == ArmMotor::WRIST) ? ArmMotor::ELBOW : ArmMotor::SHOULDER;
-      targetAngle = (currentMotor == ArmMotor::ELBOW) ? moveAngles[2] : moveAngles[1];
+    case 4: // After elbow
+      currentMotor = ArmMotor::SHOULDER;
+      targetAngle =  moveAngles[1];
       break;
-    case 5: // After elbow/shoulder
-      currentMotor = (currentMotor == ArmMotor::ELBOW) ? ArmMotor::SHOULDER : ArmMotor::GRIP;
-      targetAngle = (currentMotor == ArmMotor::SHOULDER) ? moveAngles[1] : (currentState == ROBOT_GRABBING ? GRIP_CLOSED : GRIP_OPEN);
+    case 5: // After shoulder
+      currentMotor = ArmMotor::GRIP;
+      targetAngle = currentState == ROBOT_GRABBING ? GRIP_CLOSED : GRIP_OPEN;
       break;
-    case 6:        // After shoulder/grip
+    case 6:        // After grip
       return true; // Sequence complete
     }
   }
@@ -427,8 +430,7 @@ void xoGameLoop()
         stackAngleData[stackCounter][0],
         stackAngleData[stackCounter][1],
         stackAngleData[stackCounter][2],
-        stackAngleData[stackCounter][3],
-        true);
+        stackAngleData[stackCounter][3]);
 
     currentState = ROBOT_GRABBING;
     stateStartTime = currentTime;
@@ -445,8 +447,7 @@ void xoGameLoop()
           moveAngles[0],
           moveAngles[1],
           moveAngles[2],
-          moveAngles[3],
-          false);
+          moveAngles[3]);
 
       currentState = ROBOT_PLACING;
       stateStartTime = currentTime;
@@ -472,8 +473,7 @@ void xoGameLoop()
             retreatAngles[0],
             retreatAngles[1],
             retreatAngles[2],
-            retreatAngles[3],
-            false);
+            retreatAngles[3]);
 
         currentState = ROBOT_RETREATING;
         stateStartTime = currentTime;
