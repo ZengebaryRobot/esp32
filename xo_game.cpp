@@ -74,7 +74,6 @@ static unsigned long lastActionTime = 0;
 static int servoMoveIndex = 0;
 static int currentMotor = 0;
 static int targetAngle = 0;
-static int overShootValue = 0;
 static Move robotMove = {-1, -1, 0};
 static int moveAngles[4] = {0};
 
@@ -98,9 +97,9 @@ void startXOGame()
   stateStartTime = millis();
 }
 
-bool xoExecuteServoMove(ArmMotor motor, int angle, int overShoot)
+bool xoExecuteServoMove(ArmMotor motor, int angle)
 {
-  if (sendServoCommand(motor, angle, overShoot))
+  if (sendServoCommand(motor, angle, 0))
   {
     return true;
   }
@@ -122,13 +121,11 @@ void setupServoMoveSequence(int baseAngle, int shoulderAngle, int elbowAngle, in
   {
     currentMotor = ArmMotor::GRIP;
     targetAngle = GRIP_OPEN;
-    overShootValue = 0;
   }
   else
   {
     currentMotor = ArmMotor::SHOULDER;
     targetAngle = DEFAULT_ANGLE_SHOULDER;
-    overShootValue = 10;
   }
 }
 
@@ -142,7 +139,7 @@ bool processServoMoveStep()
 
   lastActionTime = millis();
 
-  bool success = xoExecuteServoMove((ArmMotor)currentMotor, targetAngle, overShootValue);
+  bool success = xoExecuteServoMove((ArmMotor)currentMotor, targetAngle);
   if (success)
   {
     servoMoveIndex++;
@@ -152,27 +149,22 @@ bool processServoMoveStep()
     case 1: // After grip open/shoulder default
       currentMotor = (currentMotor == ArmMotor::GRIP) ? ArmMotor::SHOULDER : ArmMotor::BASE;
       targetAngle = (currentMotor == ArmMotor::SHOULDER) ? DEFAULT_ANGLE_SHOULDER : moveAngles[0];
-      overShootValue = (currentMotor == ArmMotor::SHOULDER) ? 10 : 0;
       break;
     case 2: // After shoulder default/base
       currentMotor = (currentMotor == ArmMotor::SHOULDER) ? ArmMotor::BASE : ArmMotor::WRIST;
       targetAngle = (currentMotor == ArmMotor::BASE) ? moveAngles[0] : moveAngles[3];
-      overShootValue = (currentMotor == ArmMotor::BASE) ? 0 : 4;
       break;
     case 3: // After base/wrist
       currentMotor = (currentMotor == ArmMotor::BASE) ? ArmMotor::WRIST : ArmMotor::ELBOW;
       targetAngle = (currentMotor == ArmMotor::WRIST) ? moveAngles[3] : moveAngles[2];
-      overShootValue = (currentMotor == ArmMotor::WRIST) ? 4 : 0;
       break;
     case 4: // After wrist/elbow
       currentMotor = (currentMotor == ArmMotor::WRIST) ? ArmMotor::ELBOW : ArmMotor::SHOULDER;
       targetAngle = (currentMotor == ArmMotor::ELBOW) ? moveAngles[2] : moveAngles[1];
-      overShootValue = (currentMotor == ArmMotor::ELBOW) ? 0 : 10;
       break;
     case 5: // After elbow/shoulder
       currentMotor = (currentMotor == ArmMotor::ELBOW) ? ArmMotor::SHOULDER : ArmMotor::GRIP;
       targetAngle = (currentMotor == ArmMotor::SHOULDER) ? moveAngles[1] : (currentState == ROBOT_GRABBING ? GRIP_CLOSED : GRIP_OPEN);
-      overShootValue = (currentMotor == ArmMotor::SHOULDER) ? 10 : 0;
       break;
     case 6:        // After shoulder/grip
       return true; // Sequence complete
