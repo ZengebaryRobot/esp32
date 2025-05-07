@@ -25,6 +25,7 @@ enum GameState
   ROBOT_THINKING,
   ROBOT_GRABBING,
   ROBOT_PLACING,
+  ROBOT_RETREATING,
   WAITING_FOR_PLAYER,
   CAPTURING_BOARD,
   GAME_OVER
@@ -50,6 +51,9 @@ const int stackAngleData[5][4] = {
     {79, 28, 85, 39},
     {79, 33, 88, 41},
     {79, 36, 88, 40}};
+
+// Retreat position angles
+const int retreatAngles[4] = {90, 90, 90, 90};
 
 // Structure to store move coordinates and score
 typedef struct
@@ -471,11 +475,30 @@ void xoGameLoop()
       else
       {
         printBoard();
-        turn = PLAYER_O;
-        currentState = WAITING_FOR_PLAYER;
+        // Setup for retreating phase
+        setupServoMoveSequence(
+            retreatAngles[0],
+            retreatAngles[1],
+            retreatAngles[2],
+            retreatAngles[3],
+            false);
+
+        currentState = ROBOT_RETREATING;
         stateStartTime = currentTime;
-        printOnLCD("Your turn...");
+        printOnLCD("Robot retreating...");
       }
+    }
+    break;
+
+  case ROBOT_RETREATING:
+    // Execute retreating sequence
+    if (processServoMoveStep())
+    {
+      // Retreating complete
+      turn = PLAYER_O;
+      currentState = WAITING_FOR_PLAYER;
+      stateStartTime = currentTime;
+      printOnLCD("Your turn...");
     }
     break;
 
