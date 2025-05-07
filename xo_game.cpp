@@ -77,12 +77,23 @@ static int targetAngle = 0;
 static Move robotMove = {-1, -1, 0};
 static int moveAngles[4] = {0};
 
+bool xoExecuteServoMove(ArmMotor motor, int angle)
+{
+  if (sendServoCommand(motor, angle, 0))
+  {
+    return true;
+  }
+
+  Serial.println("Servo command failed, will retry...");
+  return false;
+}
+
 void startXOGame()
 {
   Serial.println("Starting XO Game");
   changeConfig("xo");
 
-  whlie(true){  // might add some delay to avoid spinning
+  while(true){  // might add some delay to avoid spinning
     bool success = xoExecuteServoMove(ArmMotor::GRIP, GRIP_OPEN);
     if (success)
     {
@@ -106,16 +117,7 @@ void startXOGame()
   stateStartTime = millis();
 }
 
-bool xoExecuteServoMove(ArmMotor motor, int angle)
-{
-  if (sendServoCommand(motor, angle, 0))
-  {
-    return true;
-  }
 
-  Serial.println("Servo command failed, will retry...");
-  return false;
-}
 
 // State machine servo move sequence setup
 void setupServoMoveSequence(int baseAngle, int shoulderAngle, int elbowAngle, int wristAngle)
