@@ -14,8 +14,8 @@ extern void printOnLCD(const String &msg);
 #define PLAYER_X 1
 #define PLAYER_O 2
 
-#define GRIP_CLOSED 72
-#define GRIP_OPEN 100
+#define GRIP_CLOSED 80
+#define GRIP_OPEN 105
 #define DEFAULT_ANGLE_SHOULDER 90
 
 // Define game states
@@ -92,15 +92,6 @@ void startXOGame()
 {
   Serial.println("Starting XO Game");
   changeConfig("xo");
-
-  while(true){  // might add some delay to avoid spinning
-    bool success = xoExecuteServoMove(ArmMotor::GRIP, GRIP_OPEN);
-    if (success)
-    {
-      break; 
-    }
-    Serial.println("Retrying servo command for grip open...");
-  }
 
   gameEnded = false;
   turn = PLAYER_X;
@@ -563,7 +554,7 @@ void xoGameLoop()
   }
 
   // Check for game result in any state
-  if (currentState != GAME_OVER)
+  if (currentState == ROBOT_THINKING || currentState == ROBOT_RETREATING)
   {
     int res = evaluateResult(PLAYER_X, PLAYER_O);
     if (res == 10)
