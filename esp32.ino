@@ -20,7 +20,7 @@
 #define ENABLE_SERVER_GAME_INFO 1
 
 // LCD Display
-#define ENABLE_DISPLAY 1
+#define ENABLE_DISPLAY 0
 #define SDA_PIN 14
 #define SCL_PIN 15
 
@@ -69,7 +69,7 @@ struct Game
   const char *name;
   GameFunctionPtr startGame;
   GameFunctionPtr gameLoop;
-  GameFunctionPtr stopGame; // New function pointer for stopping games
+  GameFunctionPtr stopGame;
 };
 
 Game games[GAME_COUNT];
@@ -160,7 +160,11 @@ void setup()
   connectToWiFi();
   initGames();
   changeConfig("none");
-  // initDisplay();
+
+#if ENABLE_DISPLAY
+  initDisplay();
+  printOnLCD("Ready!");
+#endif
 
 #if ENABLE_ESP32_SERVER
   setupServerEndpoints();
@@ -561,9 +565,11 @@ void initDisplay()
   lcd.setCursor(0, 0);
   lcd.print("Ready!");
 }
+#endif
 
 void printOnLCD(const String &msg)
 {
+#if ENABLE_DISPLAY
   uint16_t len = msg.length();
   if (len > 32)
     len = 32;
@@ -580,8 +586,11 @@ void printOnLCD(const String &msg)
   {
     lcd.print("                ");
   }
-}
+#else
+  Serial.print("LCD: ");
+  Serial.println(msg);
 #endif
+}
 
 // Game management functions
 void initGames()
