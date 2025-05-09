@@ -163,7 +163,7 @@ void setup()
 
 #if ENABLE_DISPLAY
   initDisplay();
-  printOnLCD("Ready!");
+  printOnLCD("Zengebary");
 #endif
 
 #if ENABLE_ESP32_SERVER
