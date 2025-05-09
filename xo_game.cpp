@@ -14,7 +14,7 @@ extern void printOnLCD(const String &msg);
 #define PLAYER_X 1
 #define PLAYER_O 2
 
-#define GRIP_CLOSED 80
+#define GRIP_CLOSED 75
 #define GRIP_OPEN 105
 #define DEFAULT_ANGLE_SHOULDER 90
 
@@ -41,17 +41,17 @@ int lastBoard[3][3] = {
     {EMPTY, EMPTY, EMPTY}};
 
 const int angleData[3][3][4] = {
-    {{118, 12, 70, 47}, {108, 18, 80, 52}, {95, 16, 75, 50}},
+    {{118, 12, 70, 47}, {108, 18, 80, 52}, {94, 16, 75, 50}},
     {{122, 35, 112, 55}, {108, 43, 126, 70}, {93, 38, 116, 60}},
-    {{126, 60, 150, 74}, {108, 60, 150, 68}, {90, 61, 150, 76}}};
+    {{128, 60, 150, 74}, {108, 60, 150, 68}, {89, 61, 150, 77}}};
 
 const int stackAngleData[5][4] = {
-    {79, 23, 85, 41},
-    {79, 26, 85, 41},
-    {79, 28, 85, 39},
-    {79, 33, 88, 41},
-    {79, 36, 88, 40}};
-
+  {79, 25, 92, 48},
+  {79, 26, 90, 44},
+  {79, 30, 90, 44},
+  {79, 32, 87, 40},
+  {79, 35, 87, 40}
+};
 // Retreat position angles
 const int retreatAngles[4] = {90, 90, 90, 90};
 
