@@ -30,42 +30,41 @@ enum GameState
   DROP_CUP
 };
 
-
 // States for the grabbing and releasing sequences
 enum ArmMoveState
 {
-    MOVE_IDLE,
-    PICK_LEFT,       // Added for cup positions
-    DROP_LEFT,      // Added for cup positions
-    PICK_MIDDLE,     // Added for cup positions
-    DROP_MIDDLE,      // Added for cup positions
-    PICK_RIGHT,      // Added for cup positions
-    DROP_RIGHT,      // Added for cup positions
-    MOVE_COMPLETE
+  MOVE_IDLE,
+  PICK_LEFT,   // Added for cup positions
+  DROP_LEFT,   // Added for cup positions
+  PICK_MIDDLE, // Added for cup positions
+  DROP_MIDDLE, // Added for cup positions
+  PICK_RIGHT,  // Added for cup positions
+  DROP_RIGHT,  // Added for cup positions
+  MOVE_COMPLETE
 };
 
 // Cup position angles for the arm to point to
 const int cupAngleData[3][4] = {
-    {138, 46, 126, 66},   // Left cup
-    {108, 60, 146, 80},   // Middle cup
-    {80, 48, 126, 64},    // Right cup
+    {138, 46, 126, 66}, // Left cup
+    {108, 60, 146, 80}, // Middle cup
+    {80, 48, 126, 64},  // Right cup
 };
 
 // State machine variables
 static GameState currentState = GAME_INIT;
-static ArmMoveState armState = MOVE_IDLE;  // Current arm movement state
+static ArmMoveState armState = MOVE_IDLE; // Current arm movement state
 static unsigned long stateStartTime = 0;
 static unsigned long lastActionTime = 0;
 static int servoMoveIndex = 0;
 static int currentMotor = 0;
 static int targetAngle = 0;
 static int overShootValue = 0;
-static String ballCup[3];      // Cup contents - can be "null" or a string like "red"
+static String ballCup[3]; // Cup contents - can be "null" or a string like "red"
 static int moveAngles[4] = {0};
 static bool gameEnded = false;
 static int roundCount = 0;
 static int currentCupIndex = 0; // Used for processing multiple cups
-static String colors[4] = {"","red", "blue", "orange"};
+static String colors[4] = {"", "red", "blue", "orange"};
 static String cupsName[3] = {"Left Cup", "Middle Cup", "Right Cup"};
 int dropped = 1;
 
@@ -76,7 +75,8 @@ void startCupsGame()
 
   gameEnded = false;
   // Initialize all cups to "null"
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < 3; i++)
+  {
     ballCup[i] = "null";
   }
   roundCount = 1; // Only one round
@@ -85,7 +85,7 @@ void startCupsGame()
   currentState = GAME_INIT;
   armState = MOVE_IDLE; // Initialize arm state
   stateStartTime = millis();
-  
+
   printOnLCD("3 Cups Game Started");
 }
 
@@ -101,7 +101,7 @@ bool cupsExecuteServoMove(ArmMotor motor, int angle)
 }
 
 // State machine servo move sequence setup
-void setupCupsServoMoveSequence(int baseAngle, int shoulderAngle, int elbowAngle, int wristAngle , ArmMotor Currmotor , int angle)
+void setupCupsServoMoveSequence(int baseAngle, int shoulderAngle, int elbowAngle, int wristAngle, ArmMotor Currmotor, int angle)
 {
   servoMoveIndex = 0;
   moveAngles[0] = baseAngle;
@@ -109,10 +109,8 @@ void setupCupsServoMoveSequence(int baseAngle, int shoulderAngle, int elbowAngle
   moveAngles[2] = elbowAngle;
   moveAngles[3] = wristAngle;
 
-  
   currentMotor = Currmotor;
   targetAngle = angle;
-  
 }
 
 // Process one servo move step in the sequence
@@ -146,15 +144,15 @@ bool gripCups()
       break;
     case 4: // After elbow
       currentMotor = ArmMotor::SHOULDER;
-      targetAngle =  moveAngles[1];
+      targetAngle = moveAngles[1];
       break;
     case 5: // After shoulder
       currentMotor = ArmMotor::GRIP;
-      targetAngle =  GRIP_CLOSED;
+      targetAngle = GRIP_CLOSED;
       break;
     case 6:
       currentMotor = ArmMotor::SHOULDER;
-      targetAngle =  moveAngles[1] + 40; 
+      targetAngle = moveAngles[1] + 40;
       break;
     case 7:        // After grip
       return true; // Sequence complete
@@ -162,7 +160,7 @@ bool gripCups()
   }
   return false; // Sequence not complete yet
 }
-bool retreatArm() 
+bool retreatArm()
 {
   if (millis() - lastActionTime < 200)
   {
@@ -188,12 +186,12 @@ bool retreatArm()
       break;
     case 3: // After wrist
       currentMotor = ArmMotor::ELBOW;
-      targetAngle =  moveAngles[2];
+      targetAngle = moveAngles[2];
       break;
     case 4: // After elbow
       currentMotor = ArmMotor::GRIP;
-      targetAngle =  GRIP_OPEN;
-      break; 
+      targetAngle = GRIP_OPEN;
+      break;
     case 5:        // After grip
       return true; // Sequence complete
     }
@@ -219,7 +217,7 @@ bool dropCups()
     {
     case 1: // After shoulder default
       currentMotor = ArmMotor::GRIP;
-      targetAngle =  GRIP_OPEN;
+      targetAngle = GRIP_OPEN;
       break;
     case 2:        // After grip
       return true; // Sequence complete
@@ -243,18 +241,19 @@ bool extractBallCup(int cameraData[], uint8_t count)
     // Serial.println("Invalid camera data count");
     return false;
   }
-  
+
   // Set cup contents from camera data
   bool anyBallFound = false;
-  for(int i = 0; i < 3; i++) {
+  for (int i = 0; i < 3; i++)
+  {
     // Serial.println(cameraData[i]);
-    if(cameraData[i] != 0)
+    if (cameraData[i] != 0)
     {
       anyBallFound = true;
       ballCup[i] = colors[cameraData[i]];
     }
   }
-  
+
   return anyBallFound; // Return true if at least one cup has a ball
 }
 
@@ -294,8 +293,8 @@ void cupsGameLoop()
   case WAITING_FOR_DETECTION:
     // Wait for camera to detect cups
     if (currentTime - stateStartTime > 4000)
-    { 
-    //   Serial.println("Looking for ball position...");
+    {
+      //   Serial.println("Looking for ball position...");
       String res = getPythonData("cupsResult");
 
       if (res != "ERROR")
@@ -307,10 +306,10 @@ void cupsGameLoop()
         if (extractBallCup(cameraData, count))
         {
           // Serial.println("Balls detected in cups:");
-          
+
           // Reset the cup index counter for processing multiple cups
           currentCupIndex = 0;
-          
+
           // Transition to the new state for handling multiple cups
           currentState = PROCESSING_MULTIPLE_CUPS;
           stateStartTime = currentTime;
@@ -334,25 +333,26 @@ void cupsGameLoop()
 
   case PROCESSING_MULTIPLE_CUPS:
     // Find the next cup with a ball
-    while (currentCupIndex < 3 && ballCup[currentCupIndex] == "null") {
+    while (currentCupIndex < 3 && ballCup[currentCupIndex] == "null")
+    {
       currentCupIndex++;
     }
-    
+
     // If we found a cup with a ball
-    if (currentCupIndex < 3) {
+    if (currentCupIndex < 3)
+    {
       // Get cup name for display
       String cupName;
-      
+
       // Set appropriate arm state based on cup position
 
-      
       Serial.print("Ball with color : ");
       Serial.print(ballCup[currentCupIndex]);
       Serial.print(" under the ");
       Serial.println(cupsName[currentCupIndex]);
       // Serial.print(" cup: ");
       // Serial.println(ballCup[currentCupIndex]);
-      
+
       // Setup angles for pointing to this cup
       getAnglesForCup(currentCupIndex, moveAngles);
       setupCupsServoMoveSequence(
@@ -362,30 +362,33 @@ void cupsGameLoop()
           cupAngleData[currentCupIndex][3],
           ArmMotor::GRIP,
           GRIP_OPEN);
-      
+
       // Move to the pointing state
       currentState = PICK_CUP;
       stateStartTime = currentTime;
       printOnLCD(ballCup[currentCupIndex] + " in " + cupName);
     }
-    else {
+    else
+    {
       // No more cups with balls, game is complete
       Serial.println("Game complete");
-      
+
       // Set arm state to complete
       armState = MOVE_COMPLETE;
-      
+
       // Reset current index
       currentCupIndex = 0;
-      
+
       // Always end the game after one round
       gameEnded = true;
       currentState = GAME_OVER;
     }
     break;
   case PICK_CUP:
-    if (currentTime - stateStartTime > 1000) {
-          if(gripCups()) {
+    if (currentTime - stateStartTime > 1000)
+    {
+      if (gripCups())
+      {
         setupCupsServoMoveSequence(
             cupAngleData[currentCupIndex][0],
             cupAngleData[currentCupIndex][1],
@@ -396,36 +399,39 @@ void cupsGameLoop()
 
         currentState = DROP_CUP;
         stateStartTime = currentTime;
-      } 
+      }
     }
     break;
   case DROP_CUP:
-    if (currentTime - stateStartTime > 5000) {
-         if(dropCups()) {
-          setupCupsServoMoveSequence(
+    if (currentTime - stateStartTime > 5000)
+    {
+      if (dropCups())
+      {
+        setupCupsServoMoveSequence(
             retreatAngles[0],
             retreatAngles[1],
             retreatAngles[2],
             retreatAngles[3],
-              ArmMotor::SHOULDER,
-              DEFAULT_ANGLE_SHOULDER);
+            ArmMotor::SHOULDER,
+            DEFAULT_ANGLE_SHOULDER);
 
-          currentState = ROBOT_RETREATING;
-          stateStartTime = currentTime;
+        currentState = ROBOT_RETREATING;
+        stateStartTime = currentTime;
       }
     }
     break;
   case ROBOT_RETREATING:
-  // Execute retreating sequence
-  if (currentTime - stateStartTime > 1000) {
-    if (retreatArm()) 
+    // Execute retreating sequence
+    if (currentTime - stateStartTime > 1000)
     {
-      currentCupIndex++;
-      currentState = PROCESSING_MULTIPLE_CUPS;
-      stateStartTime = currentTime;
+      if (retreatArm())
+      {
+        currentCupIndex++;
+        currentState = PROCESSING_MULTIPLE_CUPS;
+        stateStartTime = currentTime;
+      }
     }
-  }
-  break;
+    break;
   case GAME_OVER:
     // Game has ended
     break;
@@ -439,7 +445,7 @@ void stopCupsGame()
   gameEnded = true;
   currentState = GAME_OVER;
   armState = MOVE_IDLE; // Reset arm state
-  
+
   // Final result
   String finalMessage = "Game completed";
   printOnLCD(finalMessage);

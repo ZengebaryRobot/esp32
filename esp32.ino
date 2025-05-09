@@ -13,40 +13,46 @@
 #define _STREAM_PART "Content-Type: image/jpeg\r\nContent-Length: %u\r\nX-Timestamp: %d.%06d\r\n\r\n"
 
 // Running average filter for frame rate calculation
-typedef struct {
-    uint32_t size;
-    uint32_t index;
-    uint32_t count;
-    uint32_t total;
-    uint32_t *values;
+typedef struct
+{
+  uint32_t size;
+  uint32_t index;
+  uint32_t count;
+  uint32_t total;
+  uint32_t *values;
 } ra_filter_t;
 
 static ra_filter_t ra_filter;
 
-static uint32_t ra_filter_run(ra_filter_t *filter, uint32_t value) {
-    if (!filter->values) {
-        return value;
-    }
-    filter->total -= filter->values[filter->index];
-    filter->values[filter->index] = value;
-    filter->total += filter->values[filter->index];
-    filter->index = (filter->index + 1) % filter->size;
-    if (filter->count < filter->size) {
-        filter->count++;
-    }
-    return filter->total / filter->count;
+static uint32_t ra_filter_run(ra_filter_t *filter, uint32_t value)
+{
+  if (!filter->values)
+  {
+    return value;
+  }
+  filter->total -= filter->values[filter->index];
+  filter->values[filter->index] = value;
+  filter->total += filter->values[filter->index];
+  filter->index = (filter->index + 1) % filter->size;
+  if (filter->count < filter->size)
+  {
+    filter->count++;
+  }
+  return filter->total / filter->count;
 }
 
-static esp_err_t ra_filter_init(ra_filter_t *filter, size_t size) {
-    filter->size = size;
-    filter->index = 0;
-    filter->count = 0;
-    filter->total = 0;
-    filter->values = (uint32_t *)calloc(size, sizeof(uint32_t));
-    if (!filter->values) {
-        return ESP_ERR_NO_MEM;
-    }
-    return ESP_OK;
+static esp_err_t ra_filter_init(ra_filter_t *filter, size_t size)
+{
+  filter->size = size;
+  filter->index = 0;
+  filter->count = 0;
+  filter->total = 0;
+  filter->values = (uint32_t *)calloc(size, sizeof(uint32_t));
+  if (!filter->values)
+  {
+    return ESP_ERR_NO_MEM;
+  }
+  return ESP_OK;
 }
 
 // Include game files
@@ -198,7 +204,7 @@ void setup()
   connectToWiFi();
   initGames();
   changeConfig("none");
-  //initDisplay();
+  // initDisplay();
 
 #if ENABLE_ESP32_SERVER
   setupServerEndpoints();
@@ -653,9 +659,12 @@ void setupServerEndpoints()
 
 #if ENABLE_SERVER_STREAMING
 
-  if (start_stream_server()) {
+  if (start_stream_server())
+  {
     Serial.println("ESP-IDF streaming server started on port 81");
-  } else {
+  }
+  else
+  {
     Serial.println("Failed to start ESP-IDF streaming server");
   }
 
@@ -705,7 +714,7 @@ void handleConfig(AsyncWebServerRequest *request)
   if (request->hasParam("framesize"))
   {
     String value = request->getParam("framesize")->value();
-    s->set_framesize(s, (framesize_t) value.toInt());
+    s->set_framesize(s, (framesize_t)value.toInt());
   }
 
   if (request->hasParam("quality"))
