@@ -103,7 +103,7 @@ sensor_t *sensor = nullptr;
 void initCamera();
 void connectToWiFi();
 void initGames();
-void switchGame(int gameIndex);
+bool switchGame(int gameIndex);
 
 // Function declarations for stopping games
 void stopXOGame();
@@ -610,12 +610,18 @@ void initGames()
   games[GAME_CUPS] = {"3 Cups", startCupsGame, cupsGameLoop, stopCupsGame};
 }
 
-void switchGame(int gameIndex)
+bool switchGame(int gameIndex)
 {
-  if (xSemaphoreTake(gameSwitchMutex, portMAX_DELAY) == pdTRUE)
+  if (xSemaphoreTake(gameSwitchMutex, 0) == pdTRUE)
   {
     requestedGameIndex = gameIndex;
     xSemaphoreGive(gameSwitchMutex);
+    return true;
+  }
+  else
+  {
+    Serial.println("Game already switching");
+    return false;
   }
 }
 
@@ -846,8 +852,15 @@ void handleChangeGame(AsyncWebServerRequest *request)
 
   if (gameIndex >= GAME_NONE)
   {
-    switchGame(gameIndex);
-    request->send(200, "text/plain", "Game change request queued: " + gameParam);
+    bool success = switchGame(gameIndex);
+    if (success)
+    {
+      request->send(200, "text/plain", "Game change request queued: " + gameParam);
+    }
+    else
+    {
+      request->send(409, "text/plain", "Game already switching");
+    }
   }
   else
   {
