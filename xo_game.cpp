@@ -47,12 +47,11 @@ const int angleData[3][3][4] = {
     {{128, 60, 150, 74}, {108, 60, 150, 68}, {89, 61, 150, 77}}};
 
 const int stackAngleData[5][4] = {
-  {79, 25, 92, 48},
-  {79, 26, 90, 44},
-  {79, 30, 90, 44},
-  {79, 32, 87, 40},
-  {79, 35, 87, 40}
-};
+    {79, 25, 92, 48},
+    {79, 26, 90, 44},
+    {79, 30, 90, 44},
+    {79, 32, 87, 40},
+    {79, 35, 87, 40}};
 // Retreat position angles
 const int defaultAngles[4] = {90, 90, 90, 90};
 
@@ -109,8 +108,6 @@ void startXOGame()
   stateStartTime = millis();
 }
 
-
-
 // State machine servo move sequence setup
 void setupServoMoveSequence(int baseAngle, int shoulderAngle, int elbowAngle, int wristAngle)
 {
@@ -120,11 +117,10 @@ void setupServoMoveSequence(int baseAngle, int shoulderAngle, int elbowAngle, in
   moveAngles[2] = elbowAngle;
   moveAngles[3] = wristAngle;
 
-  
   currentMotor = ArmMotor::SHOULDER;
   targetAngle = DEFAULT_ANGLE_SHOULDER;
   overShootValue = 10;
-  
+
 }
 
 // Process one servo move step in the sequence
@@ -159,7 +155,7 @@ bool processServoMoveStep()
       break;
     case 4: // After elbow
       currentMotor = ArmMotor::SHOULDER;
-      targetAngle =  moveAngles[1];
+      targetAngle = moveAngles[1];
       break;
     case 5: // After shoulder
       currentMotor = ArmMotor::GRIP;

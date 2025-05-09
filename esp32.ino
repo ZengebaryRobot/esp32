@@ -6,54 +6,11 @@
 #include "esp_camera.h"
 #include "stream_handler.h"
 
-// Define streaming constants
-#define PART_BOUNDARY "123456789000000000000987654321"
-#define _STREAM_CONTENT_TYPE "multipart/x-mixed-replace;boundary=" PART_BOUNDARY
-#define _STREAM_BOUNDARY "\r\n--" PART_BOUNDARY "\r\n"
-#define _STREAM_PART "Content-Type: image/jpeg\r\nContent-Length: %u\r\nX-Timestamp: %d.%06d\r\n\r\n"
-
-// Running average filter for frame rate calculation
-typedef struct {
-    uint32_t size;
-    uint32_t index;
-    uint32_t count;
-    uint32_t total;
-    uint32_t *values;
-} ra_filter_t;
-
-static ra_filter_t ra_filter;
-
-static uint32_t ra_filter_run(ra_filter_t *filter, uint32_t value) {
-    if (!filter->values) {
-        return value;
-    }
-    filter->total -= filter->values[filter->index];
-    filter->values[filter->index] = value;
-    filter->total += filter->values[filter->index];
-    filter->index = (filter->index + 1) % filter->size;
-    if (filter->count < filter->size) {
-        filter->count++;
-    }
-    return filter->total / filter->count;
-}
-
-static esp_err_t ra_filter_init(ra_filter_t *filter, size_t size) {
-    filter->size = size;
-    filter->index = 0;
-    filter->count = 0;
-    filter->total = 0;
-    filter->values = (uint32_t *)calloc(size, sizeof(uint32_t));
-    if (!filter->values) {
-        return ESP_ERR_NO_MEM;
-    }
-    return ESP_OK;
-}
-
 // Include game files
 #include "xo_game.h"
 #include "rubik_game.h"
 #include "memory_game.h"
-#include "cups_game.h"
+#include "threeCups_game.h"
 
 // Enable ESP32 server
 #define ENABLE_ESP32_SERVER 1
@@ -63,7 +20,7 @@ static esp_err_t ra_filter_init(ra_filter_t *filter, size_t size) {
 #define ENABLE_SERVER_GAME_INFO 1
 
 // LCD Display
-#define ENABLE_DISPLAY 1
+#define ENABLE_DISPLAY 0
 #define SDA_PIN 14
 #define SCL_PIN 15
 
@@ -112,11 +69,16 @@ struct Game
   const char *name;
   GameFunctionPtr startGame;
   GameFunctionPtr gameLoop;
-  GameFunctionPtr stopGame; // New function pointer for stopping games
+  GameFunctionPtr stopGame;
 };
 
 Game games[GAME_COUNT];
 int currentGameIndex = GAME_NONE;
+
+// Game switching request
+bool gameSwitchInProgress = false;
+int requestedGameIndex = GAME_NONE; // -1 means no switch requested
+SemaphoreHandle_t gameSwitchMutex = NULL;
 
 // Wifi credentials
 const char *ssid = "Zengebary";
@@ -141,7 +103,7 @@ sensor_t *sensor = nullptr;
 void initCamera();
 void connectToWiFi();
 void initGames();
-void switchGame(int gameIndex);
+bool switchGame(int gameIndex);
 
 // Function declarations for stopping games
 void stopXOGame();
@@ -198,15 +160,35 @@ void setup()
   connectToWiFi();
   initGames();
   changeConfig("none");
-  //initDisplay();
+
+#if ENABLE_DISPLAY
+  initDisplay();
+  printOnLCD("Zengebary");
+#endif
 
 #if ENABLE_ESP32_SERVER
   setupServerEndpoints();
 #endif
+
+  // Create mutex for game switching
+  gameSwitchMutex = xSemaphoreCreateMutex();
 }
 
 void loop()
 {
+  // Check if a game switch has been requested
+  if (xSemaphoreTake(gameSwitchMutex, 0) == pdTRUE)
+  {
+    if (requestedGameIndex != GAME_NONE)
+    {
+      int gameToSwitch = requestedGameIndex;
+      requestedGameIndex = GAME_NONE;
+      performGameSwitch(gameToSwitch);
+    }
+    xSemaphoreGive(gameSwitchMutex);
+  }
+
+  // Run the current game loop if one is active
   if (currentGameIndex >= 0 && currentGameIndex < GAME_COUNT)
     games[currentGameIndex].gameLoop();
 }
@@ -271,6 +253,15 @@ void initCamera()
 
 void connectToWiFi()
 {
+  // Set static IP address
+  IPAddress local_ip(192, 168, 1, 3);
+  IPAddress gateway(192, 168, 1, 1);
+  IPAddress subnet(255, 255, 255, 0);
+  if (!WiFi.config(local_ip, gateway, subnet))
+  {
+    Serial.println("Failed to configure static IP");
+  }
+
   WiFi.begin(ssid, password);
   WiFi.setSleep(false);
   Serial.print("WiFi connecting");
@@ -468,7 +459,7 @@ void changeConfig(String game)
     s->set_special_effect(s, 0);
     s->set_wb_mode(s, 0);
     s->set_ae_level(s, 0);
-    analogWrite(LED_GPIO_NUM, 0);
+    analogWrite(LED_GPIO_NUM, 200);
   }
   else
   {
@@ -583,9 +574,11 @@ void initDisplay()
   lcd.setCursor(0, 0);
   lcd.print("Ready!");
 }
+#endif
 
 void printOnLCD(const String &msg)
 {
+#if ENABLE_DISPLAY
   uint16_t len = msg.length();
   if (len > 32)
     len = 32;
@@ -602,8 +595,11 @@ void printOnLCD(const String &msg)
   {
     lcd.print("                ");
   }
-}
+#else
+  Serial.print("LCD: ");
+  Serial.println(msg);
 #endif
+}
 
 // Game management functions
 void initGames()
@@ -614,13 +610,33 @@ void initGames()
   games[GAME_CUPS] = {"3 Cups", startCupsGame, cupsGameLoop, stopCupsGame};
 }
 
-void switchGame(int gameIndex)
+bool switchGame(int gameIndex)
 {
+  if (xSemaphoreTake(gameSwitchMutex, 0) == pdTRUE)
+  {
+    requestedGameIndex = gameIndex;
+    xSemaphoreGive(gameSwitchMutex);
+    return true;
+  }
+  else
+  {
+    Serial.println("Game already switching");
+    return false;
+  }
+}
+
+void performGameSwitch(int gameIndex)
+{
+  Serial.print("Performing game switch to: ");
+  Serial.println(gameIndex);
+
   if (gameIndex < 0 || gameIndex >= GAME_COUNT)
   {
     Serial.println("Invalid game index");
     return;
   }
+
+  bool sameGame = (currentGameIndex == gameIndex);
 
   // Stop the current game if one is running
   if (currentGameIndex >= 0 && currentGameIndex < GAME_COUNT)
@@ -633,7 +649,7 @@ void switchGame(int gameIndex)
   if (gameIndex >= 0 && gameIndex < GAME_COUNT)
   {
     currentGameIndex = gameIndex;
-    Serial.print("Switching to game: ");
+    Serial.print(sameGame ? "Restarting game: " : "Switching to game: ");
     Serial.println(games[currentGameIndex].name);
     games[currentGameIndex].startGame();
   }
@@ -653,9 +669,12 @@ void setupServerEndpoints()
 
 #if ENABLE_SERVER_STREAMING
 
-  if (start_stream_server()) {
+  if (start_stream_server())
+  {
     Serial.println("ESP-IDF streaming server started on port 81");
-  } else {
+  }
+  else
+  {
     Serial.println("Failed to start ESP-IDF streaming server");
   }
 
@@ -705,7 +724,7 @@ void handleConfig(AsyncWebServerRequest *request)
   if (request->hasParam("framesize"))
   {
     String value = request->getParam("framesize")->value();
-    s->set_framesize(s, (framesize_t) value.toInt());
+    s->set_framesize(s, (framesize_t)value.toInt());
   }
 
   if (request->hasParam("quality"))
@@ -833,19 +852,14 @@ void handleChangeGame(AsyncWebServerRequest *request)
 
   if (gameIndex >= GAME_NONE)
   {
-    if (gameIndex == GAME_NONE)
+    bool success = switchGame(gameIndex);
+    if (success)
     {
-      if (currentGameIndex >= 0 && currentGameIndex < GAME_COUNT)
-      {
-        games[currentGameIndex].stopGame();
-      }
-      currentGameIndex = GAME_NONE;
-      request->send(200, "text/plain", "All games stopped");
+      request->send(200, "text/plain", "Game change request queued: " + gameParam);
     }
     else
     {
-      switchGame(gameIndex);
-      request->send(200, "text/plain", "Game switched to " + gameParam);
+      request->send(409, "text/plain", "Game already switching");
     }
   }
   else
