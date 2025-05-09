@@ -253,6 +253,15 @@ void initCamera()
 
 void connectToWiFi()
 {
+  // Set static IP address
+  IPAddress local_ip(192, 168, 1, 3);
+  IPAddress gateway(192, 168, 1, 1);
+  IPAddress subnet(255, 255, 255, 0);
+  if (!WiFi.config(local_ip, gateway, subnet))
+  {
+    Serial.println("Failed to configure static IP");
+  }
+
   WiFi.begin(ssid, password);
   WiFi.setSleep(false);
   Serial.print("WiFi connecting");
