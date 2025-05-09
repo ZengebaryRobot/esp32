@@ -468,7 +468,7 @@ void changeConfig(String game)
     s->set_special_effect(s, 0);
     s->set_wb_mode(s, 0);
     s->set_ae_level(s, 0);
-    analogWrite(LED_GPIO_NUM, 0);
+    analogWrite(LED_GPIO_NUM, 200);
   }
   else
   {
