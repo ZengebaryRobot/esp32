@@ -124,6 +124,11 @@ struct Game
 Game games[GAME_COUNT];
 int currentGameIndex = GAME_NONE;
 
+// Game switching request
+bool gameSwitchInProgress = false;
+int requestedGameIndex = GAME_NONE; // -1 means no switch requested
+SemaphoreHandle_t gameSwitchMutex = NULL;
+
 // Wifi credentials
 const char *ssid = "Zengebary";
 const char *password = "1234abcdABCD";
@@ -209,10 +214,26 @@ void setup()
 #if ENABLE_ESP32_SERVER
   setupServerEndpoints();
 #endif
+
+  // Create mutex for game switching
+  gameSwitchMutex = xSemaphoreCreateMutex();
 }
 
 void loop()
 {
+  // Check if a game switch has been requested
+  if (xSemaphoreTake(gameSwitchMutex, 0) == pdTRUE)
+  {
+    if (requestedGameIndex != GAME_NONE)
+    {
+      int gameToSwitch = requestedGameIndex;
+      requestedGameIndex = GAME_NONE;
+      performGameSwitch(gameToSwitch);
+    }
+    xSemaphoreGive(gameSwitchMutex);
+  }
+
+  // Run the current game loop if one is active
   if (currentGameIndex >= 0 && currentGameIndex < GAME_COUNT)
     games[currentGameIndex].gameLoop();
 }
@@ -622,11 +643,25 @@ void initGames()
 
 void switchGame(int gameIndex)
 {
+  if (xSemaphoreTake(gameSwitchMutex, portMAX_DELAY) == pdTRUE)
+  {
+    requestedGameIndex = gameIndex;
+    xSemaphoreGive(gameSwitchMutex);
+  }
+}
+
+void performGameSwitch(int gameIndex)
+{
+  Serial.print("Performing game switch to: ");
+  Serial.println(gameIndex);
+
   if (gameIndex < 0 || gameIndex >= GAME_COUNT)
   {
     Serial.println("Invalid game index");
     return;
   }
+
+  bool sameGame = (currentGameIndex == gameIndex);
 
   // Stop the current game if one is running
   if (currentGameIndex >= 0 && currentGameIndex < GAME_COUNT)
@@ -639,7 +674,7 @@ void switchGame(int gameIndex)
   if (gameIndex >= 0 && gameIndex < GAME_COUNT)
   {
     currentGameIndex = gameIndex;
-    Serial.print("Switching to game: ");
+    Serial.print(sameGame ? "Restarting game: " : "Switching to game: ");
     Serial.println(games[currentGameIndex].name);
     games[currentGameIndex].startGame();
   }
@@ -842,20 +877,8 @@ void handleChangeGame(AsyncWebServerRequest *request)
 
   if (gameIndex >= GAME_NONE)
   {
-    if (gameIndex == GAME_NONE)
-    {
-      if (currentGameIndex >= 0 && currentGameIndex < GAME_COUNT)
-      {
-        games[currentGameIndex].stopGame();
-      }
-      currentGameIndex = GAME_NONE;
-      request->send(200, "text/plain", "All games stopped");
-    }
-    else
-    {
-      switchGame(gameIndex);
-      request->send(200, "text/plain", "Game switched to " + gameParam);
-    }
+    switchGame(gameIndex);
+    request->send(200, "text/plain", "Game change request queued: " + gameParam);
   }
   else
   {
