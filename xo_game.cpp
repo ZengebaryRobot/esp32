@@ -93,7 +93,6 @@ void startXOGame()
   Serial.println("Starting XO Game");
   changeConfig("xo");
 
-  gameEnded = false;
   turn = PLAYER_X;
   stackCounter = 4;
   for (int i = 0; i < 3; i++)
