@@ -74,12 +74,13 @@ static unsigned long lastActionTime = 0;
 static int servoMoveIndex = 0;
 static int currentMotor = 0;
 static int targetAngle = 0;
+static int overShootValue = 0;
 static Move robotMove = {-1, -1, 0};
 static int moveAngles[4] = {0};
 
-bool xoExecuteServoMove(ArmMotor motor, int angle)
+bool xoExecuteServoMove(ArmMotor motor, int angle, int overShoot)
 {
-  if (sendServoCommand(motor, angle, 0))
+  if (sendServoCommand(motor, angle, overShoot))
   {
     return true;
   }
@@ -122,6 +123,7 @@ void setupServoMoveSequence(int baseAngle, int shoulderAngle, int elbowAngle, in
   
   currentMotor = ArmMotor::SHOULDER;
   targetAngle = DEFAULT_ANGLE_SHOULDER;
+  overShootValue = 10;
   
 }
 
@@ -135,7 +137,7 @@ bool processServoMoveStep()
 
   lastActionTime = millis();
 
-  bool success = xoExecuteServoMove((ArmMotor)currentMotor, targetAngle);
+  bool success = xoExecuteServoMove((ArmMotor)currentMotor, targetAngle, overShootValue);
   if (success)
   {
     servoMoveIndex++;
@@ -145,6 +147,7 @@ bool processServoMoveStep()
     case 1: // After shoulder default
       currentMotor = ArmMotor::BASE;
       targetAngle = moveAngles[0];
+      overShootValue = 0; // No overshoot to any other servo
       break;
     case 2: // After base
       currentMotor = ArmMotor::WRIST;
