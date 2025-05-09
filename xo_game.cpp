@@ -65,7 +65,6 @@ typedef struct
 
 static int stackCounter = 4;
 static int turn = PLAYER_X;
-static bool gameEnded = false;
 
 // State machine variables
 static GameState currentState = GAME_INIT;
@@ -379,20 +378,14 @@ bool extractPlayableGrid(int cameraData[], uint8_t count)
 
 void xoGameLoop()
 {
-  if (gameEnded)
-  {
-    if (currentState != GAME_OVER)
-    {
-      currentState = GAME_OVER;
-      printOnLCD("Game Over");
-    }
-    return;
-  }
-
   unsigned long currentTime = millis();
 
   switch (currentState)
   {
+  case GAME_OVER:
+    // Game has ended
+    return;
+    
   case GAME_INIT:
     // Initialize game state
     if (currentTime - stateStartTime > 500)
@@ -458,7 +451,6 @@ void xoGameLoop()
       if (--stackCounter < 0)
       {
         Serial.println("Stack underflow");
-        gameEnded = true;
         currentState = GAME_OVER;
       }
       else
@@ -550,33 +542,32 @@ void xoGameLoop()
     }
     break;
   }
-
-  case GAME_OVER:
-    // Game has ended
-    break;
   }
 
   // Check for game result in any state
-  if (currentState == ROBOT_THINKING || currentState == ROBOT_RETREATING)
+  if (currentState == ROBOT_RETREATING || currentState == ROBOT_THINKING) // only check after Player_X or Player_O move
   {
     int res = evaluateResult(PLAYER_X, PLAYER_O);
     if (res == 10)
     {
       Serial.println("I win");
-      gameEnded = true;
+      currentState = GAME_OVER;
       printOnLCD("Robot wins!");
+      printOnLCD("Game Over");
     }
     else if (res == -10)
     {
       Serial.println("I lose");
-      gameEnded = true;
+      currentState = GAME_OVER;
       printOnLCD("You win!");
+      printOnLCD("Game Over");
     }
     else if (isBoardFull())
     {
       Serial.println("Tie");
-      gameEnded = true;
+      currentState = GAME_OVER;
       printOnLCD("It's a tie!");
+      printOnLCD("Game Over");
     }
   }
 }
@@ -585,6 +576,5 @@ void stopXOGame()
 {
   Serial.println("Stopping XO Game");
   changeConfig("none");
-  gameEnded = true;
   currentState = GAME_OVER;
 }
