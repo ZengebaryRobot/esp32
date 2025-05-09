@@ -22,6 +22,7 @@ extern void printOnLCD(const String &msg);
 enum GameState
 {
   GAME_INIT,
+  ROBOT_INIT,
   ROBOT_THINKING,
   ROBOT_GRABBING,
   ROBOT_PLACING,
@@ -53,7 +54,7 @@ const int stackAngleData[5][4] = {
   {79, 35, 87, 40}
 };
 // Retreat position angles
-const int retreatAngles[4] = {90, 90, 90, 90};
+const int defaultAngles[4] = {90, 90, 90, 90};
 
 // Structure to store move coordinates and score
 typedef struct
@@ -391,14 +392,20 @@ void xoGameLoop()
     if (currentTime - stateStartTime > 500)
     {
       printOnLCD("XO Game Started");
-      if (turn == PLAYER_X)
-      {
-        currentState = ROBOT_THINKING;
-      }
-      else
-      {
-        currentState = WAITING_FOR_PLAYER;
-      }
+      setupServoMoveSequence(defaultAngles[0],
+                             defaultAngles[1],
+                             defaultAngles[2],
+                             defaultAngles[3]);
+      currentState = ROBOT_INIT;
+      stateStartTime = currentTime;
+    }
+    break;
+
+  case ROBOT_INIT:
+    // Initialize robot arm
+    if (processServoMoveStep())
+    {
+      currentState = ROBOT_THINKING;
       stateStartTime = currentTime;
     }
     break;
@@ -458,10 +465,10 @@ void xoGameLoop()
         printBoard();
         // Setup for retreating phase
         setupServoMoveSequence(
-            retreatAngles[0],
-            retreatAngles[1],
-            retreatAngles[2],
-            retreatAngles[3]);
+            defaultAngles[0],
+            defaultAngles[1],
+            defaultAngles[2],
+            defaultAngles[3]);
 
         currentState = ROBOT_RETREATING;
         stateStartTime = currentTime;
