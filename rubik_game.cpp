@@ -47,6 +47,7 @@ void sendLastFaceToServer(int *data, uint8_t &count)
     }
     else
     {
+      count = 0;
       Serial.println("Camera failed while scanning face");
     }
   }
@@ -154,162 +155,225 @@ void parseStepperCommands(int move)
     return; // Invalid input
   }
 }
-
+/**
+ * U: 1 -> [0,1]
+ * D: 4 -> [6,7]
+ * L: 5 -> [8,9]
+ * R: 2 -> [2,3]
+ * F: 3 -> [4,5]
+ */
 void rubikGameLoop()
 {
   if (i < 4)
   {
     sendFaceToServer();
-    memset(stepperCmd, 0, sizeof(stepperCmd));
     stepperCmd[2] = 90;
     stepperCmd[3] = 0;
-    sendStepperCommand(stepperCmd);
+    sendStepperCommand(stepperCmd); // R1
+    stepperCmd[2] = 0;
     delay(20);
-    memset(stepperCmd, 0, sizeof(stepperCmd));
+
     stepperCmd[8] = 90;
     stepperCmd[9] = 1;
-    sendStepperCommand(stepperCmd);
+    sendStepperCommand(stepperCmd); // L3
+    stepperCmd[8] = 0;
+    delay(20);
   }
   else if (i >= 4 && i < 8)
   {
-    memset(stepperCmd, 0, sizeof(stepperCmd));
     stepperCmd[6] = 90;
     stepperCmd[7] = 0;
-    sendStepperCommand(stepperCmd);
+    sendStepperCommand(stepperCmd); // D1
+    stepperCmd[6] = 0;    
     delay(20);
-    memset(stepperCmd, 0, sizeof(stepperCmd));
+
     stepperCmd[0] = 90;
     stepperCmd[1] = 1;
-    sendStepperCommand(stepperCmd);
-    sendFaceToServer();
+    sendStepperCommand(stepperCmd); // U3
+    stepperCmd[0] = 0;
+    delay(20);
+
+    if(i < 7) sendFaceToServer();
   }
   else if (i == 8)
   {
-    memset(stepperCmd, 0, sizeof(stepperCmd));
     stepperCmd[2] = 90;
     stepperCmd[3] = 0;
-    sendStepperCommand(stepperCmd);
+    sendStepperCommand(stepperCmd); // R1
+    stepperCmd[2] = 0;
     delay(20);
-    memset(stepperCmd, 0, sizeof(stepperCmd));
+
     stepperCmd[0] = 90;
     stepperCmd[1] = 1;
+    sendStepperCommand(stepperCmd); // U3
+    stepperCmd[0] = 0;
     delay(20);
-    sendStepperCommand(stepperCmd);
-    memset(stepperCmd, 0, sizeof(stepperCmd));
+
     stepperCmd[6] = 90;
     stepperCmd[7] = 0;
-    sendStepperCommand(stepperCmd);
+    sendStepperCommand(stepperCmd); // D1
+    stepperCmd[6] = 0;
     delay(20);
+
     sendFaceToServer();
 
     // Reverse the moves
-    memset(stepperCmd, 0, sizeof(stepperCmd));
     stepperCmd[6] = 90;
     stepperCmd[7] = 1;
-    sendStepperCommand(stepperCmd);
+    sendStepperCommand(stepperCmd); // D3
+    stepperCmd[6] = 0;
     delay(20);
-    memset(stepperCmd, 0, sizeof(stepperCmd));
+
     stepperCmd[0] = 90;
     stepperCmd[1] = 0;
-    sendStepperCommand(stepperCmd);
+    sendStepperCommand(stepperCmd); // U1
+    stepperCmd[0] = 0;
     delay(20);
-    memset(stepperCmd, 0, sizeof(stepperCmd));
+
+    
     stepperCmd[2] = 90;
     stepperCmd[3] = 1;
-    sendStepperCommand(stepperCmd);
+    sendStepperCommand(stepperCmd); // R3
+    stepperCmd[2] = 0;
+    delay(20);
   }
   else if (i == 9)
   {
-    memset(stepperCmd, 0, sizeof(stepperCmd));
     stepperCmd[8] = 90;
     stepperCmd[9] = 1;
-    sendStepperCommand(stepperCmd);
+    sendStepperCommand(stepperCmd); // L3
+    stepperCmd[8] = 0;
     delay(20);
-    memset(stepperCmd, 0, sizeof(stepperCmd));
+
+    
     stepperCmd[0] = 90;
     stepperCmd[1] = 0;
-    sendStepperCommand(stepperCmd);
+    sendStepperCommand(stepperCmd); // U1
+    stepperCmd[0] = 0;
     delay(20);
-    memset(stepperCmd, 0, sizeof(stepperCmd));
+
     stepperCmd[6] = 90;
     stepperCmd[7] = 1;
-    sendStepperCommand(stepperCmd);
+    sendStepperCommand(stepperCmd); // D3
+    stepperCmd[6] = 0;
     delay(20);
 
     sendFaceToServer();
+
+    stepperCmd[6] = 90;
+    stepperCmd[7] = 0;
+    sendStepperCommand(stepperCmd); // D1
+    stepperCmd[6] = 0;
+    delay(20);
+
+    
+    stepperCmd[0] = 90;
+    stepperCmd[1] = 1;
+    sendStepperCommand(stepperCmd); // U3
+    stepperCmd[0] = 0;
+    delay(20);
+
+    
+    stepperCmd[8] = 90;
+    stepperCmd[9] = 0;
+    sendStepperCommand(stepperCmd); // L1
+    stepperCmd[8] = 0;
+    delay(20);
   }
   else if (i == 10)
   {
-    memset(stepperCmd, 0, sizeof(stepperCmd));
+    
+    stepperCmd[6] = 90;
+    stepperCmd[7] = 0;
+    sendStepperCommand(stepperCmd); // D1
+    stepperCmd[6] = 0;
+    delay(20);
+
     stepperCmd[8] = 90;
     stepperCmd[9] = 0;
-    sendStepperCommand(stepperCmd);
+    sendStepperCommand(stepperCmd); // L1
+    stepperCmd[8] = 0;
     delay(20);
-    memset(stepperCmd, 0, sizeof(stepperCmd));
+
+    
     stepperCmd[2] = 90;
     stepperCmd[3] = 1;
-    sendStepperCommand(stepperCmd);
+    sendStepperCommand(stepperCmd); // R3
+    stepperCmd[2] = 0;
     delay(20);
 
     sendFaceToServer();
 
     // Reverse the moves
-    memset(stepperCmd, 0, sizeof(stepperCmd));
+    
     stepperCmd[2] = 90;
     stepperCmd[3] = 0;
-    sendStepperCommand(stepperCmd);
+    sendStepperCommand(stepperCmd); // R1
+    stepperCmd[2] = 0;
     delay(20);
-    memset(stepperCmd, 0, sizeof(stepperCmd));
+    
     stepperCmd[8] = 90;
     stepperCmd[9] = 1;
-    sendStepperCommand(stepperCmd);
+    sendStepperCommand(stepperCmd); // L3
+    stepperCmd[8] = 0;
     delay(20);
-    memset(stepperCmd, 0, sizeof(stepperCmd));
+
+    
     stepperCmd[6] = 90;
     stepperCmd[7] = 1;
-    sendStepperCommand(stepperCmd);
+    sendStepperCommand(stepperCmd); // D3
+    stepperCmd[6] = 0;
     delay(20);
   }
   else if (i == 11)
   {
-    memset(stepperCmd, 0, sizeof(stepperCmd));
+    
     stepperCmd[0] = 90;
     stepperCmd[1] = 1;
-    sendStepperCommand(stepperCmd);
-    delay(20);
-    memset(stepperCmd, 0, sizeof(stepperCmd));
-    stepperCmd[8] = 90;
-    stepperCmd[9] = 1;
-    sendStepperCommand(stepperCmd);
+    sendStepperCommand(stepperCmd); // U3
+    stepperCmd[0] = 0;
     delay(20);
 
-    memset(stepperCmd, 0, sizeof(stepperCmd));
+    
+    stepperCmd[8] = 90;
+    stepperCmd[9] = 1;
+    sendStepperCommand(stepperCmd); // L3
+    stepperCmd[8] = 0;
+    delay(20);
+
+    
     stepperCmd[2] = 90;
     stepperCmd[3] = 0;
-    sendStepperCommand(stepperCmd);
+    sendStepperCommand(stepperCmd); // R1
+    stepperCmd[2] = 0;
     delay(20);
 
     sendLastFaceToServer(moves, movesCount);
 
-    memset(stepperCmd, 0, sizeof(stepperCmd));
+    
     stepperCmd[2] = 90;
     stepperCmd[3] = 1;
-    sendStepperCommand(stepperCmd);
-    delay(20);
-    memset(stepperCmd, 0, sizeof(stepperCmd));
-    stepperCmd[8] = 90;
-    stepperCmd[9] = 0;
-    sendStepperCommand(stepperCmd);
+    sendStepperCommand(stepperCmd); // R3
+    stepperCmd[2] = 0;
     delay(20);
 
-    memset(stepperCmd, 0, sizeof(stepperCmd));
+    
+    stepperCmd[8] = 90;
+    stepperCmd[9] = 0;
+    sendStepperCommand(stepperCmd); // L1
+    stepperCmd[8] = 0;
+    delay(20);
+
+    
     stepperCmd[0] = 90;
     stepperCmd[1] = 0;
-    sendStepperCommand(stepperCmd);
+    sendStepperCommand(stepperCmd); // U1
+    stepperCmd[0] = 0;
     delay(20);
   }
   else if (i == 12)
   {
+    if(movesCount == 0) return;
     for (int k = 0; k < movesCount; k++)
     {
       // Moves array = {xy}, where x = motor, y = angle (1, 2, 3)
