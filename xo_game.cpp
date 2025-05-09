@@ -22,6 +22,7 @@ extern void printOnLCD(const String &msg);
 enum GameState
 {
   GAME_INIT,
+  ROBOT_INIT,
   ROBOT_THINKING,
   ROBOT_GRABBING,
   ROBOT_PLACING,
@@ -52,7 +53,7 @@ const int stackAngleData[5][4] = {
     {79, 32, 87, 40},
     {79, 35, 87, 40}};
 // Retreat position angles
-const int retreatAngles[4] = {90, 90, 90, 90};
+const int defaultAngles[4] = {90, 90, 90, 90};
 
 // Structure to store move coordinates and score
 typedef struct
@@ -64,7 +65,6 @@ typedef struct
 
 static int stackCounter = 4;
 static int turn = PLAYER_X;
-static bool gameEnded = false;
 
 // State machine variables
 static GameState currentState = GAME_INIT;
@@ -73,12 +73,13 @@ static unsigned long lastActionTime = 0;
 static int servoMoveIndex = 0;
 static int currentMotor = 0;
 static int targetAngle = 0;
+static int overShootValue = 0;
 static Move robotMove = {-1, -1, 0};
 static int moveAngles[4] = {0};
 
-bool xoExecuteServoMove(ArmMotor motor, int angle)
+bool xoExecuteServoMove(ArmMotor motor, int angle, int overShoot)
 {
-  if (sendServoCommand(motor, angle, 0))
+  if (sendServoCommand(motor, angle, overShoot))
   {
     return true;
   }
@@ -118,6 +119,8 @@ void setupServoMoveSequence(int baseAngle, int shoulderAngle, int elbowAngle, in
 
   currentMotor = ArmMotor::SHOULDER;
   targetAngle = DEFAULT_ANGLE_SHOULDER;
+  overShootValue = 10;
+
 }
 
 // Process one servo move step in the sequence
@@ -130,7 +133,7 @@ bool processServoMoveStep()
 
   lastActionTime = millis();
 
-  bool success = xoExecuteServoMove((ArmMotor)currentMotor, targetAngle);
+  bool success = xoExecuteServoMove((ArmMotor)currentMotor, targetAngle, overShootValue);
   if (success)
   {
     servoMoveIndex++;
@@ -140,6 +143,7 @@ bool processServoMoveStep()
     case 1: // After shoulder default
       currentMotor = ArmMotor::BASE;
       targetAngle = moveAngles[0];
+      overShootValue = 0; // No overshoot to any other servo
       break;
     case 2: // After base
       currentMotor = ArmMotor::WRIST;
@@ -371,33 +375,33 @@ bool extractPlayableGrid(int cameraData[], uint8_t count)
 
 void xoGameLoop()
 {
-  if (gameEnded)
-  {
-    if (currentState != GAME_OVER)
-    {
-      currentState = GAME_OVER;
-      printOnLCD("Game Over");
-    }
-    return;
-  }
-
   unsigned long currentTime = millis();
 
   switch (currentState)
   {
+  case GAME_OVER:
+    // Game has ended
+    return;
+    
   case GAME_INIT:
     // Initialize game state
     if (currentTime - stateStartTime > 500)
     {
       printOnLCD("XO Game Started");
-      if (turn == PLAYER_X)
-      {
-        currentState = ROBOT_THINKING;
-      }
-      else
-      {
-        currentState = WAITING_FOR_PLAYER;
-      }
+      setupServoMoveSequence(defaultAngles[0],
+                             defaultAngles[1],
+                             defaultAngles[2],
+                             defaultAngles[3]);
+      currentState = ROBOT_INIT;
+      stateStartTime = currentTime;
+    }
+    break;
+
+  case ROBOT_INIT:
+    // Initialize robot arm
+    if (processServoMoveStep())
+    {
+      currentState = ROBOT_THINKING;
       stateStartTime = currentTime;
     }
     break;
@@ -450,7 +454,6 @@ void xoGameLoop()
       if (--stackCounter < 0)
       {
         Serial.println("Stack underflow");
-        gameEnded = true;
         currentState = GAME_OVER;
       }
       else
@@ -458,10 +461,10 @@ void xoGameLoop()
         printBoard();
         // Setup for retreating phase
         setupServoMoveSequence(
-            retreatAngles[0],
-            retreatAngles[1],
-            retreatAngles[2],
-            retreatAngles[3]);
+            defaultAngles[0],
+            defaultAngles[1],
+            defaultAngles[2],
+            defaultAngles[3]);
 
         currentState = ROBOT_RETREATING;
         stateStartTime = currentTime;
@@ -542,33 +545,32 @@ void xoGameLoop()
     }
     break;
   }
-
-  case GAME_OVER:
-    // Game has ended
-    break;
   }
 
   // Check for game result in any state
-  if (currentState == ROBOT_THINKING || currentState == ROBOT_RETREATING)
+  if (currentState == ROBOT_RETREATING || currentState == ROBOT_THINKING) // only check after Player_X or Player_O move
   {
     int res = evaluateResult(PLAYER_X, PLAYER_O);
     if (res == 10)
     {
       Serial.println("I win");
-      gameEnded = true;
+      currentState = GAME_OVER;
       printOnLCD("Robot wins!");
+      printOnLCD("Game Over");
     }
     else if (res == -10)
     {
       Serial.println("I lose");
-      gameEnded = true;
+      currentState = GAME_OVER;
       printOnLCD("You win!");
+      printOnLCD("Game Over");
     }
     else if (isBoardFull())
     {
       Serial.println("Tie");
-      gameEnded = true;
+      currentState = GAME_OVER;
       printOnLCD("It's a tie!");
+      printOnLCD("Game Over");
     }
   }
 }
@@ -577,6 +579,5 @@ void stopXOGame()
 {
   Serial.println("Stopping XO Game");
   changeConfig("none");
-  gameEnded = true;
   currentState = GAME_OVER;
 }
