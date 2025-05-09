@@ -123,7 +123,7 @@ const char *ssid = "Zengebary";
 const char *password = "1234abcdABCD";
 
 // Main server endpoint
-const char *serverEndpoint = "http://192.168.1.3:5000/process";
+const char *serverEndpoint = "http://192.168.1.4:8000/process";
 
 // HTTP server
 #if ENABLE_ESP32_SERVER

@@ -14,8 +14,8 @@ extern void printOnLCD(const String &msg);
 #define PLAYER_X 1
 #define PLAYER_O 2
 
-#define GRIP_CLOSED 72
-#define GRIP_OPEN 100
+#define GRIP_CLOSED 75
+#define GRIP_OPEN 105
 #define DEFAULT_ANGLE_SHOULDER 90
 
 // Define game states
@@ -25,6 +25,7 @@ enum GameState
   ROBOT_THINKING,
   ROBOT_GRABBING,
   ROBOT_PLACING,
+  ROBOT_RETREATING,
   WAITING_FOR_PLAYER,
   CAPTURING_BOARD,
   GAME_OVER
@@ -40,16 +41,19 @@ int lastBoard[3][3] = {
     {EMPTY, EMPTY, EMPTY}};
 
 const int angleData[3][3][4] = {
-    {{118, 12, 70, 47}, {108, 18, 80, 52}, {95, 16, 75, 50}},
+    {{118, 12, 70, 47}, {108, 18, 80, 52}, {94, 16, 75, 50}},
     {{122, 35, 112, 55}, {108, 43, 126, 70}, {93, 38, 116, 60}},
-    {{126, 60, 150, 74}, {108, 60, 150, 68}, {90, 61, 150, 76}}};
+    {{128, 60, 150, 74}, {108, 60, 150, 68}, {89, 61, 150, 77}}};
 
 const int stackAngleData[5][4] = {
-    {79, 23, 85, 41},
-    {79, 26, 85, 41},
-    {79, 28, 85, 39},
-    {79, 33, 88, 41},
-    {79, 36, 88, 40}};
+  {79, 25, 92, 48},
+  {79, 26, 90, 44},
+  {79, 30, 90, 44},
+  {79, 32, 87, 40},
+  {79, 35, 87, 40}
+};
+// Retreat position angles
+const int retreatAngles[4] = {90, 90, 90, 90};
 
 // Structure to store move coordinates and score
 typedef struct
@@ -70,9 +74,19 @@ static unsigned long lastActionTime = 0;
 static int servoMoveIndex = 0;
 static int currentMotor = 0;
 static int targetAngle = 0;
-static int overShootValue = 0;
 static Move robotMove = {-1, -1, 0};
 static int moveAngles[4] = {0};
+
+bool xoExecuteServoMove(ArmMotor motor, int angle)
+{
+  if (sendServoCommand(motor, angle, 0))
+  {
+    return true;
+  }
+
+  Serial.println("Servo command failed, will retry...");
+  return false;
+}
 
 void startXOGame()
 {
@@ -94,19 +108,10 @@ void startXOGame()
   stateStartTime = millis();
 }
 
-bool xoExecuteServoMove(ArmMotor motor, int angle, int overShoot)
-{
-  if (sendServoCommand(motor, angle, overShoot))
-  {
-    return true;
-  }
 
-  Serial.println("Servo command failed, will retry...");
-  return false;
-}
 
 // State machine servo move sequence setup
-void setupServoMoveSequence(int baseAngle, int shoulderAngle, int elbowAngle, int wristAngle, bool isGrabbing)
+void setupServoMoveSequence(int baseAngle, int shoulderAngle, int elbowAngle, int wristAngle)
 {
   servoMoveIndex = 0;
   moveAngles[0] = baseAngle;
@@ -114,18 +119,10 @@ void setupServoMoveSequence(int baseAngle, int shoulderAngle, int elbowAngle, in
   moveAngles[2] = elbowAngle;
   moveAngles[3] = wristAngle;
 
-  if (isGrabbing)
-  {
-    currentMotor = ArmMotor::GRIP;
-    targetAngle = GRIP_OPEN;
-    overShootValue = 0;
-  }
-  else
-  {
-    currentMotor = ArmMotor::SHOULDER;
-    targetAngle = DEFAULT_ANGLE_SHOULDER;
-    overShootValue = 10;
-  }
+  
+  currentMotor = ArmMotor::SHOULDER;
+  targetAngle = DEFAULT_ANGLE_SHOULDER;
+  
 }
 
 // Process one servo move step in the sequence
@@ -138,39 +135,34 @@ bool processServoMoveStep()
 
   lastActionTime = millis();
 
-  bool success = xoExecuteServoMove((ArmMotor)currentMotor, targetAngle, overShootValue);
+  bool success = xoExecuteServoMove((ArmMotor)currentMotor, targetAngle);
   if (success)
   {
     servoMoveIndex++;
 
     switch (servoMoveIndex)
     {
-    case 1: // After grip open/shoulder default
-      currentMotor = (currentMotor == ArmMotor::GRIP) ? ArmMotor::SHOULDER : ArmMotor::BASE;
-      targetAngle = (currentMotor == ArmMotor::SHOULDER) ? DEFAULT_ANGLE_SHOULDER : moveAngles[0];
-      overShootValue = (currentMotor == ArmMotor::SHOULDER) ? 10 : 0;
+    case 1: // After shoulder default
+      currentMotor = ArmMotor::BASE;
+      targetAngle = moveAngles[0];
       break;
-    case 2: // After shoulder default/base
-      currentMotor = (currentMotor == ArmMotor::SHOULDER) ? ArmMotor::BASE : ArmMotor::WRIST;
-      targetAngle = (currentMotor == ArmMotor::BASE) ? moveAngles[0] : moveAngles[3];
-      overShootValue = (currentMotor == ArmMotor::BASE) ? 0 : 4;
+    case 2: // After base
+      currentMotor = ArmMotor::WRIST;
+      targetAngle = moveAngles[3];
       break;
-    case 3: // After base/wrist
-      currentMotor = (currentMotor == ArmMotor::BASE) ? ArmMotor::WRIST : ArmMotor::ELBOW;
-      targetAngle = (currentMotor == ArmMotor::WRIST) ? moveAngles[3] : moveAngles[2];
-      overShootValue = (currentMotor == ArmMotor::WRIST) ? 4 : 0;
+    case 3: // After wrist
+      currentMotor = ArmMotor::ELBOW;
+      targetAngle = moveAngles[2];
       break;
-    case 4: // After wrist/elbow
-      currentMotor = (currentMotor == ArmMotor::WRIST) ? ArmMotor::ELBOW : ArmMotor::SHOULDER;
-      targetAngle = (currentMotor == ArmMotor::ELBOW) ? moveAngles[2] : moveAngles[1];
-      overShootValue = (currentMotor == ArmMotor::ELBOW) ? 0 : 10;
+    case 4: // After elbow
+      currentMotor = ArmMotor::SHOULDER;
+      targetAngle =  moveAngles[1];
       break;
-    case 5: // After elbow/shoulder
-      currentMotor = (currentMotor == ArmMotor::ELBOW) ? ArmMotor::SHOULDER : ArmMotor::GRIP;
-      targetAngle = (currentMotor == ArmMotor::SHOULDER) ? moveAngles[1] : (currentState == ROBOT_GRABBING ? GRIP_CLOSED : GRIP_OPEN);
-      overShootValue = (currentMotor == ArmMotor::SHOULDER) ? 10 : 0;
+    case 5: // After shoulder
+      currentMotor = ArmMotor::GRIP;
+      targetAngle = currentState == ROBOT_GRABBING ? GRIP_CLOSED : GRIP_OPEN;
       break;
-    case 6:        // After shoulder/grip
+    case 6:        // After grip
       return true; // Sequence complete
     }
   }
@@ -431,8 +423,7 @@ void xoGameLoop()
         stackAngleData[stackCounter][0],
         stackAngleData[stackCounter][1],
         stackAngleData[stackCounter][2],
-        stackAngleData[stackCounter][3],
-        true);
+        stackAngleData[stackCounter][3]);
 
     currentState = ROBOT_GRABBING;
     stateStartTime = currentTime;
@@ -449,8 +440,7 @@ void xoGameLoop()
           moveAngles[0],
           moveAngles[1],
           moveAngles[2],
-          moveAngles[3],
-          false);
+          moveAngles[3]);
 
       currentState = ROBOT_PLACING;
       stateStartTime = currentTime;
@@ -471,11 +461,29 @@ void xoGameLoop()
       else
       {
         printBoard();
-        turn = PLAYER_O;
-        currentState = WAITING_FOR_PLAYER;
+        // Setup for retreating phase
+        setupServoMoveSequence(
+            retreatAngles[0],
+            retreatAngles[1],
+            retreatAngles[2],
+            retreatAngles[3]);
+
+        currentState = ROBOT_RETREATING;
         stateStartTime = currentTime;
-        printOnLCD("Your turn...");
+        printOnLCD("Robot retreating...");
       }
+    }
+    break;
+
+  case ROBOT_RETREATING:
+    // Execute retreating sequence
+    if (processServoMoveStep())
+    {
+      // Retreating complete
+      turn = PLAYER_O;
+      currentState = WAITING_FOR_PLAYER;
+      stateStartTime = currentTime;
+      printOnLCD("Your turn...");
     }
     break;
 
@@ -546,7 +554,7 @@ void xoGameLoop()
   }
 
   // Check for game result in any state
-  if (currentState != GAME_OVER)
+  if (currentState == ROBOT_THINKING || currentState == ROBOT_RETREATING)
   {
     int res = evaluateResult(PLAYER_X, PLAYER_O);
     if (res == 10)
