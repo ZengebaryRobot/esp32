@@ -119,7 +119,6 @@ void setupServoMoveSequence(int baseAngle, int shoulderAngle, int elbowAngle, in
   currentMotor = ArmMotor::SHOULDER;
   targetAngle = DEFAULT_ANGLE_SHOULDER;
   overShootValue = 10;
-
 }
 
 // Process one servo move step in the sequence
@@ -381,7 +380,7 @@ void xoGameLoop()
   case GAME_OVER:
     // Game has ended
     return;
-    
+
   case GAME_INIT:
     // Initialize game state
     if (currentTime - stateStartTime > 500)
@@ -416,6 +415,9 @@ void xoGameLoop()
     Serial.print(", Col ");
     Serial.println(robotMove.col);
 
+    // Display move on LCD
+    printOnLCD("Robot plays: " + String(robotMove.row + 1) + "," + String(robotMove.col + 1));
+
     // Setup for grabbing phase
     setupServoMoveSequence(
         stackAngleData[stackCounter][0],
@@ -433,6 +435,7 @@ void xoGameLoop()
     if (processServoMoveStep())
     {
       // Grabbing complete, prepare to place piece
+      printOnLCD("Grabbing piece...");
       getAnglesForCell(robotMove.row, robotMove.col, moveAngles);
       setupServoMoveSequence(
           moveAngles[0],
@@ -450,6 +453,7 @@ void xoGameLoop()
     if (processServoMoveStep())
     {
       // Placing complete
+      printOnLCD("Placing piece...");
       if (--stackCounter < 0)
       {
         Serial.println("Stack underflow");
@@ -497,6 +501,7 @@ void xoGameLoop()
   {
     // Enclose this case block in braces to scope the variable
     Serial.println("Player O Move: ");
+    printOnLCD("Reading board...");
     String res = getPythonData("xo");
 
     if (res != "ERROR")
@@ -525,7 +530,6 @@ void xoGameLoop()
           // Invalid move, wait and try again
           currentState = WAITING_FOR_PLAYER;
           stateStartTime = millis() + 2000; // Wait a bit before retrying
-          printOnLCD("Invalid move!");
         }
       }
       else
@@ -540,7 +544,6 @@ void xoGameLoop()
       Serial.println("Camera failed");
       currentState = WAITING_FOR_PLAYER;
       stateStartTime = millis() + 1000;
-      printOnLCD("Camera error!");
     }
     break;
   }
@@ -554,22 +557,19 @@ void xoGameLoop()
     {
       Serial.println("I win");
       currentState = GAME_OVER;
-      printOnLCD("Robot wins!");
-      printOnLCD("Game Over");
+      printOnLCD("Robot wins! Game Over");
     }
     else if (res == -10)
     {
       Serial.println("I lose");
       currentState = GAME_OVER;
-      printOnLCD("You win!");
-      printOnLCD("Game Over");
+      printOnLCD("You win! Game Over");
     }
     else if (isBoardFull())
     {
       Serial.println("Tie");
       currentState = GAME_OVER;
-      printOnLCD("It's a tie!");
-      printOnLCD("Game Over");
+      printOnLCD("It's a tie! Game Over");
     }
   }
 }
