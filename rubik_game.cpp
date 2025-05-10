@@ -33,8 +33,6 @@ void parseString(String str, int *data, uint8_t &count)
 
 void sendLastFaceToServer(int *data, uint8_t &count)
 {
-  while (true)
-  {
     String res = getPythonData("rubik");
 
     if (res != "ERROR")
@@ -43,32 +41,30 @@ void sendLastFaceToServer(int *data, uint8_t &count)
       // Convert the string array-like to an integer array
       parseString(movesString, data, count);
       Serial.println("Moves: " + res);
-      break;
+      return;
     }
     else
     {
       count = 0;
       Serial.println("Camera failed while scanning face");
     }
-  }
+  
 }
 
 void sendFaceToServer()
 {
-  while (true)
-  {
     String res = getPythonData("rubik");
 
     if (res != "ERROR")
     {
-      Serial.println("Scanned face: " + res);
-      break;
+      Serial.println("Scanned face: " + i);
+      return;
     }
     else
     {
       Serial.println("Camera failed while scanning face");
     }
-  }
+  
 }
 
 void startRubikGame()
@@ -76,19 +72,17 @@ void startRubikGame()
   Serial.println("Starting Rubik's Cube Game");
   changeConfig("rubik");
 
-  while (true)
-  {
     String res = getPythonData("rubikReset");
     if (res != "ERROR")
     {
       Serial.println("Rubik's Cube reset successful");
-      break;
+      
     }
     else
     {
       Serial.println("Failed to start Rubik's Cube, retrying...");
     }
-  }
+  
 
   // Fix array assignments
   memset(moves, 0, sizeof(moves));
@@ -166,18 +160,19 @@ void rubikGameLoop()
 {
   if (i < 4)
   {
+    delay(100);
     sendFaceToServer();
     stepperCmd[2] = 90;
     stepperCmd[3] = 0;
     sendStepperCommand(stepperCmd); // R1
     stepperCmd[2] = 0;
-    delay(20);
+    delay(50);
 
     stepperCmd[8] = 90;
     stepperCmd[9] = 1;
     sendStepperCommand(stepperCmd); // L3
     stepperCmd[8] = 0;
-    delay(20);
+    delay(100);
   }
   else if (i >= 4 && i < 8)
   {
@@ -185,13 +180,13 @@ void rubikGameLoop()
     stepperCmd[7] = 0;
     sendStepperCommand(stepperCmd); // D1
     stepperCmd[6] = 0;
-    delay(20);
+    delay(50);
 
     stepperCmd[0] = 90;
     stepperCmd[1] = 1;
     sendStepperCommand(stepperCmd); // U3
     stepperCmd[0] = 0;
-    delay(20);
+    delay(100);
 
     if (i < 7)
       sendFaceToServer();
@@ -202,19 +197,19 @@ void rubikGameLoop()
     stepperCmd[3] = 0;
     sendStepperCommand(stepperCmd); // R1
     stepperCmd[2] = 0;
-    delay(20);
+    delay(50);
 
     stepperCmd[0] = 90;
     stepperCmd[1] = 1;
     sendStepperCommand(stepperCmd); // U3
     stepperCmd[0] = 0;
-    delay(20);
+    delay(50);
 
     stepperCmd[6] = 90;
     stepperCmd[7] = 0;
     sendStepperCommand(stepperCmd); // D1
     stepperCmd[6] = 0;
-    delay(20);
+    delay(100);
 
     sendFaceToServer();
 
@@ -223,19 +218,19 @@ void rubikGameLoop()
     stepperCmd[7] = 1;
     sendStepperCommand(stepperCmd); // D3
     stepperCmd[6] = 0;
-    delay(20);
+    delay(50);
 
     stepperCmd[0] = 90;
     stepperCmd[1] = 0;
     sendStepperCommand(stepperCmd); // U1
     stepperCmd[0] = 0;
-    delay(20);
+    delay(50);
 
     stepperCmd[2] = 90;
     stepperCmd[3] = 1;
     sendStepperCommand(stepperCmd); // R3
     stepperCmd[2] = 0;
-    delay(20);
+    delay(50);
   }
   else if (i == 9)
   {
@@ -243,19 +238,19 @@ void rubikGameLoop()
     stepperCmd[9] = 1;
     sendStepperCommand(stepperCmd); // L3
     stepperCmd[8] = 0;
-    delay(20);
+    delay(50);
 
     stepperCmd[0] = 90;
     stepperCmd[1] = 0;
     sendStepperCommand(stepperCmd); // U1
     stepperCmd[0] = 0;
-    delay(20);
+    delay(50);
 
     stepperCmd[6] = 90;
     stepperCmd[7] = 1;
     sendStepperCommand(stepperCmd); // D3
     stepperCmd[6] = 0;
-    delay(20);
+    delay(100);
 
     sendFaceToServer();
 
@@ -263,19 +258,19 @@ void rubikGameLoop()
     stepperCmd[7] = 0;
     sendStepperCommand(stepperCmd); // D1
     stepperCmd[6] = 0;
-    delay(20);
+    delay(50);
 
     stepperCmd[0] = 90;
     stepperCmd[1] = 1;
     sendStepperCommand(stepperCmd); // U3
     stepperCmd[0] = 0;
-    delay(20);
+    delay(50);
 
     stepperCmd[8] = 90;
     stepperCmd[9] = 0;
     sendStepperCommand(stepperCmd); // L1
     stepperCmd[8] = 0;
-    delay(20);
+    delay(50);
   }
   else if (i == 10)
   {
@@ -284,19 +279,19 @@ void rubikGameLoop()
     stepperCmd[7] = 0;
     sendStepperCommand(stepperCmd); // D1
     stepperCmd[6] = 0;
-    delay(20);
+    delay(50);
 
     stepperCmd[8] = 90;
     stepperCmd[9] = 0;
     sendStepperCommand(stepperCmd); // L1
     stepperCmd[8] = 0;
-    delay(20);
+    delay(50);
 
     stepperCmd[2] = 90;
     stepperCmd[3] = 1;
     sendStepperCommand(stepperCmd); // R3
     stepperCmd[2] = 0;
-    delay(20);
+    delay(100);
 
     sendFaceToServer();
 
@@ -306,19 +301,19 @@ void rubikGameLoop()
     stepperCmd[3] = 0;
     sendStepperCommand(stepperCmd); // R1
     stepperCmd[2] = 0;
-    delay(20);
+    delay(50);
 
     stepperCmd[8] = 90;
     stepperCmd[9] = 1;
     sendStepperCommand(stepperCmd); // L3
     stepperCmd[8] = 0;
-    delay(20);
+    delay(50);
 
     stepperCmd[6] = 90;
     stepperCmd[7] = 1;
     sendStepperCommand(stepperCmd); // D3
     stepperCmd[6] = 0;
-    delay(20);
+    delay(50);
   }
   else if (i == 11)
   {
@@ -327,19 +322,19 @@ void rubikGameLoop()
     stepperCmd[1] = 1;
     sendStepperCommand(stepperCmd); // U3
     stepperCmd[0] = 0;
-    delay(20);
+    delay(50);
 
     stepperCmd[8] = 90;
     stepperCmd[9] = 1;
     sendStepperCommand(stepperCmd); // L3
     stepperCmd[8] = 0;
-    delay(20);
+    delay(50);
 
     stepperCmd[2] = 90;
     stepperCmd[3] = 0;
     sendStepperCommand(stepperCmd); // R1
     stepperCmd[2] = 0;
-    delay(20);
+    delay(100);
 
     sendLastFaceToServer(moves, movesCount);
 
@@ -347,19 +342,19 @@ void rubikGameLoop()
     stepperCmd[3] = 1;
     sendStepperCommand(stepperCmd); // R3
     stepperCmd[2] = 0;
-    delay(20);
+    delay(50);
 
     stepperCmd[8] = 90;
     stepperCmd[9] = 0;
     sendStepperCommand(stepperCmd); // L1
     stepperCmd[8] = 0;
-    delay(20);
+    delay(50);
 
     stepperCmd[0] = 90;
     stepperCmd[1] = 0;
     sendStepperCommand(stepperCmd); // U1
     stepperCmd[0] = 0;
-    delay(20);
+    delay(50);
   }
   else if (i == 12)
   {
@@ -370,9 +365,9 @@ void rubikGameLoop()
       // Moves array = {xy}, where x = motor, y = angle (1, 2, 3)
       // Angle: 1: 90, 2: 180, 3: -90
       parseStepperCommands(moves[k]);
-      delay(20);
+      delay(50);
     }
-  }
+  }else return;
   i++;
 }
 

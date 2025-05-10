@@ -20,7 +20,7 @@
 #define ENABLE_SERVER_GAME_INFO 1
 
 // LCD Display
-#define ENABLE_DISPLAY 0
+#define ENABLE_DISPLAY 1
 #define SDA_PIN 14
 #define SCL_PIN 15
 
@@ -389,8 +389,8 @@ void changeConfig(String game)
     s->set_whitebal(s, 1);
     s->set_gain_ctrl(s, 1);
     s->set_exposure_ctrl(s, 1);
-    s->set_hmirror(s, 0);
-    s->set_vflip(s, 0);
+    s->set_hmirror(s, 1);
+    s->set_vflip(s, 1);
     s->set_awb_gain(s, 1);
     s->set_agc_gain(s, 0);
     s->set_aec_value(s, 168);
@@ -403,7 +403,7 @@ void changeConfig(String game)
     s->set_special_effect(s, 0);
     s->set_wb_mode(s, 0);
     s->set_ae_level(s, 0);
-    analogWrite(LED_GPIO_NUM, 0);
+    analogWrite(LED_GPIO_NUM, 150);
   }
   else if (game == "memory")
   {
@@ -612,7 +612,7 @@ void initGames()
 
 bool switchGame(int gameIndex)
 {
-  if (xSemaphoreTake(gameSwitchMutex, 0) == pdTRUE)
+  if (xSemaphoreTake(gameSwitchMutex, portMAX_DELAY) == pdTRUE)
   {
     requestedGameIndex = gameIndex;
     xSemaphoreGive(gameSwitchMutex);
@@ -847,7 +847,7 @@ void handleChangeGame(AsyncWebServerRequest *request)
     gameIndex = GAME_MEMORY;
   else if (gameParam == "cups")
     gameIndex = GAME_CUPS;
-  else if (gameParam == "none")
+  else
     gameIndex = GAME_NONE;
 
   if (gameIndex >= GAME_NONE)
