@@ -416,7 +416,7 @@ void xoGameLoop()
     Serial.println(robotMove.col);
 
     // Display move on LCD
-    printOnLCD("Robot plays: " + String(robotMove.row + 1) + "," + String(robotMove.col + 1));
+    printOnLCD("Robot plays:    " + String(robotMove.row + 1) + "," + String(robotMove.col + 1));
 
     // Setup for grabbing phase
     setupServoMoveSequence(
@@ -435,7 +435,7 @@ void xoGameLoop()
     if (processServoMoveStep())
     {
       // Grabbing complete, prepare to place piece
-      printOnLCD("Grabbing piece...");
+      printOnLCD("Grabbing piece..");
       getAnglesForCell(robotMove.row, robotMove.col, moveAngles);
       setupServoMoveSequence(
           moveAngles[0],
@@ -471,7 +471,7 @@ void xoGameLoop()
 
         currentState = ROBOT_RETREATING;
         stateStartTime = currentTime;
-        printOnLCD("Robot retreating...");
+        printOnLCD("Robot           retreating...");
       }
     }
     break;
@@ -557,19 +557,19 @@ void xoGameLoop()
     {
       Serial.println("I win");
       currentState = GAME_OVER;
-      printOnLCD("Robot wins! Game Over");
+      printOnLCD("Robot wins!     Game Over");
     }
     else if (res == -10)
     {
       Serial.println("I lose");
       currentState = GAME_OVER;
-      printOnLCD("You win! Game Over");
+      printOnLCD("You win!        Game Over");
     }
     else if (isBoardFull())
     {
       Serial.println("Tie");
       currentState = GAME_OVER;
-      printOnLCD("It's a tie! Game Over");
+      printOnLCD("It's a tie!     Game Over");
     }
   }
 }
