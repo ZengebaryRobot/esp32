@@ -161,6 +161,7 @@ void startMoveOperation(int from, int to)
   currentSrc = getPosition(from);
   currentDest = getPosition(to);
   armState = GRAB_OPEN_GRIP;
+  printOnLCD("Move from " + String(from) + " to " + String(to));
   Serial.print("Starting move from ");
   Serial.print(from);
   Serial.print(" to ");
@@ -269,6 +270,7 @@ bool updateArmMove()
     {
       armState = MOVE_COMPLETE;
       Serial.println("Move operation completed");
+      printOnLCD("Move Completed");
       return true;
     }
     break;
@@ -286,6 +288,7 @@ bool updateArmMove()
 void initializeGameState()
 {
   Serial.println("Initializing game state");
+  printOnLCD("Init game state");
 
   // Reset game state variables
   complete = 0;
@@ -327,10 +330,10 @@ void initializeGameState()
 int pickRandomCell(int currentMatrixState[][COLS])
 {
   const int OUT_POSITION = 8; // Consistent with the game loop
-  Serial.println("enters random function");
   // Create a list of valid positions to pick from
   int validPositions[CELLS_CNT];
   int validCount = 0;
+
 
   Serial.println("currest state matrix in random");
   for (int i = 0; i < ROWS; i++)
@@ -342,6 +345,7 @@ int pickRandomCell(int currentMatrixState[][COLS])
     }
     Serial.println(" ");
   }
+  
 
   // Find all valid positions (positions that still have cards and are not matched)
   for (int i = 0; i < ROWS; i++)
@@ -350,10 +354,12 @@ int pickRandomCell(int currentMatrixState[][COLS])
     {
       int shape = currentMatrixState[i][j];
       int pos = i * COLS + j;
+      /*
       Serial.print("shape: ");
       Serial.println(shape);
       Serial.print("pos: ");
       Serial.println(pos);
+      */
 
       if (shape == -1)
       {
@@ -362,6 +368,7 @@ int pickRandomCell(int currentMatrixState[][COLS])
       }
     }
   }
+  
   Serial.print("validCount: ");
   Serial.println(validCount);
 
@@ -372,6 +379,7 @@ int pickRandomCell(int currentMatrixState[][COLS])
     Serial.print(", ");
   }
   Serial.println("");
+  
   // If we have valid positions, pick one randomly
   if (validCount > 0)
   {
@@ -380,6 +388,7 @@ int pickRandomCell(int currentMatrixState[][COLS])
     // int selectedPosition = validPositions[0];
 
     Serial.print("Picked random cell: ");
+    printOnLCD("Random cell " + String(selectedPosition));
     Serial.print(selectedPosition);
     Serial.print(" (row=");
     Serial.print(selectedPosition / COLS);
@@ -407,13 +416,11 @@ void recordCardPosition(int shape, int position)
   {
     cardPositions[shape][0] = position;
     // currentMatrixState[position / 2][position % 2] = shape;
-    Serial.println("zbyy");
   }
   else if (cardPositions[shape][1] == -1)
   {
     cardPositions[shape][1] = position;
     // currentMatrixState[position / 2][position % 2] = shape;
-    Serial.println("zbyy2");
   }
   else
   {
@@ -466,10 +473,7 @@ void startMemoryGame()
   Serial.println("Starting Memory Game");
   changeConfig("memory");
   initializeGameState();
-  randomSeed(esp_random());
-  //  randomSeed(analogRead(A0));
   gameState = GAME_INIT;
-  printOnLCD("Memory Game Started");
 }
 
 void memoryGameLoop()
@@ -524,7 +528,7 @@ void memoryGameLoop()
       if (complete >= SHAPES)
       {
         gameState = GAME_COMPLETED;
-        // printOnLCD("Game Completed!");
+        printOnLCD("Game Completed!");
         Serial.println("Game completed!");
       }
       else
@@ -618,6 +622,7 @@ void memoryGameLoop()
             foundKnownMatch = true;
             matchFound = true;
             Serial.print("Found known match for shape: ");
+            printOnLCD("Match found!");
             Serial.println(shape);
             gameState = GAME_MOVE_MATCHED_CARD1;
             break;
@@ -659,7 +664,7 @@ void memoryGameLoop()
           // All shapes are matched, game is complete
           complete = SHAPES;
           gameState = GAME_COMPLETED;
-          Serial.println("All cards matched - game complete!");
+          //Serial.println("All cards matched - game complete!");
         }
         else
         {
@@ -672,6 +677,7 @@ void memoryGameLoop()
       }
 
       Serial.print("Random cell 1 picked: ");
+      printOnLCD("Random cell 1: " + String(rnd1));
       Serial.println(rnd1);
 
       // Move the card to temporary position 1
@@ -694,7 +700,7 @@ void memoryGameLoop()
         int col = rnd1 % COLS;
         currentShape1 = matrixFromCamera[row][col];
         currentMatrixState[row][col] = currentShape1;
-
+        
         Serial.println("currest state matrix in reveal1");
         for (int i = 0; i < ROWS; i++)
         {
@@ -705,7 +711,7 @@ void memoryGameLoop()
           }
           Serial.println(" ");
         }
-
+        
         Serial.print("Reveal result for rnd1 (shape): ");
         Serial.println(currentShape1);
 
@@ -747,6 +753,7 @@ void memoryGameLoop()
 
       Serial.print("Random cell 2 picked: ");
       Serial.println(rnd2);
+      printOnLCD("Random cell 2: " + String(rnd2));
 
       // Move the card to temporary position 2
       startMoveOperation(rnd2, 7);
@@ -794,6 +801,7 @@ void memoryGameLoop()
         if (currentShape1 == currentShape2)
         {
           Serial.println("Match found!");
+          printOnLCD("Match found!");
           // Mark shape as matched
           cardMatched[currentShape1] = true;
           complete++;
@@ -1022,7 +1030,7 @@ void memoryGameLoop()
 
     case GAME_COMPLETED:
       // Game is complete - stay in this state
-      Serial.println("in game complete state");
+     // Serial.println("in game complete state");
       break;
 
     default:
