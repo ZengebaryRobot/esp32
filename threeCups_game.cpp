@@ -326,7 +326,6 @@ void cupsGameLoop()
       {
         // Serial.println("Camera failed");
         stateStartTime = currentTime + 1000;
-        printOnLCD("Camera error!");
       }
     }
     break;
@@ -342,7 +341,7 @@ void cupsGameLoop()
     if (currentCupIndex < 3)
     {
       // Get cup name for display
-      String cupName;
+      String cupName = cupsName[currentCupIndex];
 
       // Set appropriate arm state based on cup position
 
