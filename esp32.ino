@@ -163,7 +163,7 @@ void setup()
 
 #if ENABLE_DISPLAY
   initDisplay();
-  printOnLCD("Zengebary       No Game is selected");
+  printOnLCD("No Game is      selected");
 #endif
 
 #if ENABLE_ESP32_SERVER
@@ -644,14 +644,14 @@ void performGameSwitch(int gameIndex)
   {
     Serial.print("Stopping game: ");
     Serial.println(games[currentGameIndex].name);
-    printOnLCD("Stopping: " + String(games[currentGameIndex].name));
+    printOnLCD("Stopping:       " + String(games[currentGameIndex].name));
     games[currentGameIndex].stopGame();
   }
 
   if (gameIndex >= 0 && gameIndex < GAME_COUNT)
   {
     currentGameIndex = gameIndex;
-    String message = sameGame ? "Restarting: " : "Starting: ";
+    String message = sameGame ? "Restarting:     " : "Starting:       ";
     message += String(games[currentGameIndex].name);
 
     Serial.print(sameGame ? "Restarting game: " : "Switching to game: ");
@@ -663,7 +663,7 @@ void performGameSwitch(int gameIndex)
   else
   {
     currentGameIndex = GAME_NONE;
-    printOnLCD("Zengebary       No Game is selected");
+    printOnLCD("No Game is      selected");
   }
 }
 
