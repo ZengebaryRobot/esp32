@@ -77,7 +77,7 @@ int currentGameIndex = GAME_NONE;
 
 // Game switching request
 bool gameSwitchInProgress = false;
-int requestedGameIndex = GAME_NONE; // -1 means no switch requested
+int requestedGameIndex = -2; // -2 means no game switch requested
 SemaphoreHandle_t gameSwitchMutex = NULL;
 
 // Wifi credentials
@@ -179,10 +179,10 @@ void loop()
   // Check if a game switch has been requested
   if (xSemaphoreTake(gameSwitchMutex, 0) == pdTRUE)
   {
-    if (requestedGameIndex != GAME_NONE)
+    if (requestedGameIndex != -2)
     {
       int gameToSwitch = requestedGameIndex;
-      requestedGameIndex = GAME_NONE;
+      requestedGameIndex = -2;
       performGameSwitch(gameToSwitch);
     }
     xSemaphoreGive(gameSwitchMutex);
@@ -630,7 +630,7 @@ void performGameSwitch(int gameIndex)
   Serial.print("Performing game switch to: ");
   Serial.println(gameIndex);
 
-  if (gameIndex < 0 || gameIndex >= GAME_COUNT)
+  if (gameIndex < -1 || gameIndex >= GAME_COUNT)
   {
     Serial.println("Invalid game index");
     return;
