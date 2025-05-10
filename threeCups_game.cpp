@@ -64,7 +64,7 @@ static int moveAngles[4] = {0};
 static bool gameEnded = false;
 static int roundCount = 0;
 static int currentCupIndex = 0; // Used for processing multiple cups
-static String colors[4] = {"", "red", "blue", "orange"};
+static String colors[4] = {"", "red", "blue", "yellow"};
 static String cupsName[3] = {"Left Cup", "Middle Cup", "Right Cup"};
 int dropped = 1;
 
