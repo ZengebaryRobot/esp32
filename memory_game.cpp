@@ -165,7 +165,7 @@ void startMoveOperation(int from, int to)
     printOnLCD("Reveal cell " + String(from));
   }
   if(to >= 8){
-    printOnLCD("Dumping...")
+    printOnLCD("Dumping...");
   }
   Serial.print("Starting move from ");
   Serial.print(from);
