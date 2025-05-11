@@ -8,8 +8,8 @@
 #define CELLS_CNT 6
 #define SHAPES 3
 #define GRIP_OPEN 120
-#define GRIP_CLOSED 58
-#define DEFAULT_ANGLE_SHOULDER 110
+#define GRIP_CLOSED 60
+#define DEFAULT_ANGLE_SHOULDER 105
 
 extern void changeConfig(String command);
 extern String getPythonData(String command);
@@ -75,15 +75,15 @@ public:
   }
 };
 
-Position cell_0(126, 16, 73, 42);
-Position cell_1(109, 24, 85, 45);
-Position cell_2(94, 18, 75, 40);
-Position cell_3(130, 50, 130, 60);
-Position cell_4(113, 53, 135, 60);
-Position cell_5(91, 54, 134, 64);
-Position cell_6(82, 83, 168, 69);  // Temporary position 1
-Position cell_7(147, 78, 165, 70); // Temporary position 2
-Position cell_8(30, 100, 168, 65); // Output position
+Position cell_0(126, 20, 75, 34);
+Position cell_1(111, 29, 90, 41);
+Position cell_2(96, 26, 85, 41);
+Position cell_3(133, 48, 124, 50);
+Position cell_4(113, 55, 135, 55);
+Position cell_5(91, 55, 134, 62);
+Position cell_6(82, 85, 169, 66);  // Temporary position 1
+Position cell_7(147, 78, 165, 72); // Temporary position 2
+Position cell_8(30, 105, 124, 50); // Output position
 
 // Global state variables
 MemoryGameState gameState = GAME_IDLE;
@@ -200,7 +200,7 @@ bool updateArmMove()
       armState = GRAB_SET_WRIST;
     break;
   case GRAB_SET_WRIST:
-    stateCompleted = executeServoMoveNonBlocking(ArmMotor::WRIST, currentSrc.wrist, 4);
+    stateCompleted = executeServoMoveNonBlocking(ArmMotor::WRIST, currentSrc.wrist, 0);
     if (stateCompleted)
       armState = GRAB_SET_ELBOW;
     break;
@@ -235,14 +235,16 @@ bool updateArmMove()
       armState = RELEASE_SET_WRIST_INTERIM;
     break;
   case RELEASE_SET_WRIST_INTERIM:
-    stateCompleted = executeServoMoveNonBlocking(ArmMotor::WRIST, 45, 15);
+    stateCompleted = executeServoMoveNonBlocking(ArmMotor::WRIST, 45, 0);
     if (stateCompleted)
       armState = RELEASE_SET_ELBOW;
     break;
   case RELEASE_SET_ELBOW:
     stateCompleted = executeServoMoveNonBlocking(ArmMotor::ELBOW, currentDest.elbow, 0);
-    if (stateCompleted)
-      armState = RELEASE_SET_WRIST_MID;
+    if (stateCompleted){
+      if(destIdx == 8) armState = RELEASE_OPEN_GRIP;
+      else armState = RELEASE_SET_WRIST_MID;
+    }
     break;
   case RELEASE_SET_WRIST_MID:
     stateCompleted = executeServoMoveNonBlocking(ArmMotor::WRIST, 55, 0);
