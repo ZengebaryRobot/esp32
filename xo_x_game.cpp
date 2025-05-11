@@ -29,6 +29,7 @@ enum GameState
   ROBOT_RETREATING,
   WAITING_FOR_PLAYER,
   CAPTURING_BOARD,
+  ROBOT_FINAL_RETREAT,
   GAME_OVER
 };
 
@@ -42,17 +43,16 @@ static int lastBoard[3][3] = {
     {EMPTY, EMPTY, EMPTY}};
 
 static const int angleData[3][3][4] = {
-  { { 122, 13, 70, 41 }, { 110, 12, 70, 40 }, { 96, 12, 68, 40 } },
-  { { 127, 34, 112, 52 }, { 110, 43, 126, 65 }, { 95, 38, 116, 60 } },
-  { { 130, 54, 145, 64 }, { 110, 60, 150, 68 }, { 91, 57, 145, 66 } }
-};
+    {{122, 13, 70, 41}, {110, 12, 70, 40}, {96, 12, 68, 40}},
+    {{127, 34, 112, 52}, {110, 43, 126, 65}, {95, 38, 116, 60}},
+    {{130, 54, 145, 64}, {110, 60, 150, 68}, {91, 57, 145, 66}}};
 
 static const int stackAngleData[5][4] = {
-  { 79, 23, 86, 37 },
-  { 79, 26, 86, 35 },
-  { 79, 27, 84, 32 },
-  { 79, 30, 84, 31 },
-  { 79, 34, 84, 30 }};
+    {79, 23, 86, 37},
+    {79, 26, 86, 35},
+    {79, 27, 84, 32},
+    {79, 30, 84, 31},
+    {79, 34, 84, 30}};
 // Retreat position angles
 static const int defaultAngles[4] = {90, 90, 90, 90};
 
@@ -548,28 +548,41 @@ void xoGameLoop()
     }
     break;
   }
+  case ROBOT_FINAL_RETREAT:
+    // Execute celebrating sequence
+    if (processServoMoveStep())
+    {
+      currentState = GAME_OVER;
+    }
+    break;
   }
 
   // Check for game result in any state
   if (currentState == ROBOT_RETREATING || currentState == ROBOT_THINKING) // only check after Player_X or Player_O move
   {
     int res = evaluateResult(PLAYER_X, PLAYER_O);
+    if (res == 10 || res == -10 || isBoardFull())
+    {
+      setupServoMoveSequence(
+          defaultAngles[0],
+          defaultAngles[1],
+          defaultAngles[2],
+          defaultAngles[3]);
+      currentState = ROBOT_FINAL_RETREAT;
+    }
     if (res == 10)
     {
       Serial.println("I win");
-      currentState = GAME_OVER;
       printOnLCD("Robot wins!     Game Over");
     }
     else if (res == -10)
     {
       Serial.println("I lose");
-      currentState = GAME_OVER;
       printOnLCD("You win!        Game Over");
     }
     else if (isBoardFull())
     {
       Serial.println("Tie");
-      currentState = GAME_OVER;
       printOnLCD("It's a tie!     Game Over");
     }
   }
