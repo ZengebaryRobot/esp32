@@ -692,10 +692,20 @@ void setupServerEndpoints()
 
 #if ENABLE_SERVER_GAME_CHANGE
   server.on("/changeGame", HTTP_GET, handleChangeGame);
+  server.on("/changeGame", HTTP_OPTIONS, [](AsyncWebServerRequest *request)
+            {
+    AsyncWebServerResponse *response = request->beginResponse(200, "text/plain", "OK");
+    addCorsHeaders(response);
+    request->send(response); });
 #endif
 
 #if ENABLE_SERVER_GAME_INFO
   server.on("/getCurrentGame", HTTP_GET, handleGetCurrentGame);
+  server.on("/getCurrentGame", HTTP_OPTIONS, [](AsyncWebServerRequest *request)
+            {
+    AsyncWebServerResponse *response = request->beginResponse(200, "text/plain", "OK");
+    addCorsHeaders(response);
+    request->send(response); });
 #endif
 
   server.begin();
@@ -716,6 +726,13 @@ void setupServerEndpoints()
 #if ENABLE_SERVER_GAME_INFO
   Serial.println("Use '/getCurrentGame' to get current game info.");
 #endif
+}
+
+void addCorsHeaders(AsyncWebServerResponse *response)
+{
+  response->addHeader("Access-Control-Allow-Origin", "*");
+  response->addHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  response->addHeader("Access-Control-Allow-Headers", "Content-Type");
 }
 
 bool toBool(String value)
@@ -840,7 +857,9 @@ void handleChangeGame(AsyncWebServerRequest *request)
 {
   if (!request->hasParam("game"))
   {
-    request->send(400, "text/plain", "Missing 'game' parameter");
+    AsyncWebServerResponse *response = request->beginResponse(400, "text/plain", "Missing 'game' parameter");
+    addCorsHeaders(response);
+    request->send(response);
     return;
   }
 
@@ -863,16 +882,22 @@ void handleChangeGame(AsyncWebServerRequest *request)
     bool success = switchGame(gameIndex);
     if (success)
     {
-      request->send(200, "text/plain", "Game change request queued: " + gameParam);
+      AsyncWebServerResponse *response = request->beginResponse(200, "text/plain", "Game change request queued: " + gameParam);
+      addCorsHeaders(response);
+      request->send(response);
     }
     else
     {
-      request->send(409, "text/plain", "Game already switching");
+      AsyncWebServerResponse *response = request->beginResponse(409, "text/plain", "Game already switching");
+      addCorsHeaders(response);
+      request->send(response);
     }
   }
   else
   {
-    request->send(400, "text/plain", "Invalid game name. Use: xo, rubik, memory, cups or none");
+    AsyncWebServerResponse *response = request->beginResponse(400, "text/plain", "Invalid game name. Use: xo, rubik, memory, cups or none");
+    addCorsHeaders(response);
+    request->send(response);
   }
 }
 #endif
@@ -891,7 +916,9 @@ void handleGetCurrentGame(AsyncWebServerRequest *request)
     response = String(games[currentGameIndex].name);
   }
 
-  request->send(200, "text/plain", response);
+  AsyncWebServerResponse *webResponse = request->beginResponse(200, "text/plain", response);
+  addCorsHeaders(webResponse);
+  request->send(webResponse);
 }
 #endif
 #endif
