@@ -553,9 +553,9 @@ void memoryGameLoop()
           Serial.print(", Matched=");
           Serial.println(cardMatched[i] ? "Yes" : "No");
         }
-        printOnLCD("Last match!");
         if (complete == SHAPES - 1)
         {
+          printOnLCD("Last match!");
           int count = 0;
           int foundPos1 = -1;
           int foundPos2 = -1;
