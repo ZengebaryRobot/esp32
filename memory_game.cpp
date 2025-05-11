@@ -161,7 +161,12 @@ void startMoveOperation(int from, int to)
   currentSrc = getPosition(from);
   currentDest = getPosition(to);
   armState = GRAB_OPEN_GRIP;
-  printOnLCD("Move from " + String(from) + " to " + String(to));
+  if(to == 6 || to == 7){
+    printOnLCD("Reveal cell " + String(from));
+  }
+  if(to >= 8){
+    printOnLCD("Dumping...")
+  }
   Serial.print("Starting move from ");
   Serial.print(from);
   Serial.print(" to ");
@@ -272,7 +277,6 @@ bool updateArmMove()
     {
       armState = MOVE_COMPLETE;
       Serial.println("Move operation completed");
-      printOnLCD("Move Completed");
       return true;
     }
     break;
@@ -290,7 +294,6 @@ bool updateArmMove()
 void initializeGameState()
 {
   Serial.println("Initializing game state");
-  printOnLCD("Init game state");
 
   // Reset game state variables
   complete = 0;
@@ -390,7 +393,6 @@ int pickRandomCell(int currentMatrixState[][COLS])
     // int selectedPosition = validPositions[0];
 
     Serial.print("Picked random cell: ");
-    printOnLCD("Random cell " + String(selectedPosition));
     Serial.print(selectedPosition);
     Serial.print(" (row=");
     Serial.print(selectedPosition / COLS);
@@ -624,7 +626,6 @@ void memoryGameLoop()
             foundKnownMatch = true;
             matchFound = true;
             Serial.print("Found known match for shape: ");
-            printOnLCD("Match found!");
             Serial.println(shape);
             gameState = GAME_MOVE_MATCHED_CARD1;
             break;
@@ -679,7 +680,6 @@ void memoryGameLoop()
       }
 
       Serial.print("Random cell 1 picked: ");
-      printOnLCD("Random cell 1: " + String(rnd1));
       Serial.println(rnd1);
 
       // Move the card to temporary position 1
@@ -724,6 +724,7 @@ void memoryGameLoop()
         if (cardPositions[currentShape1][0] != -1 && cardPositions[currentShape1][1] != -1 && !cardMatched[currentShape1])
         {
           // We already know both cards for this shape, it's a match!
+          printOnLCD("Match found!");
           matchFound = true;
           gameState = GAME_MOVE_MATCHED_CARD1;
         }
@@ -755,7 +756,6 @@ void memoryGameLoop()
 
       Serial.print("Random cell 2 picked: ");
       Serial.println(rnd2);
-      printOnLCD("Random cell 2: " + String(rnd2));
 
       // Move the card to temporary position 2
       startMoveOperation(rnd2, 7);
@@ -1049,5 +1049,4 @@ void stopMemoryGame()
   changeConfig("none");
   gameState = GAME_IDLE;
   armState = MOVE_IDLE;
-  // printOnLCD("Memory Game Stopped");
 }
