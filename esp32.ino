@@ -7,7 +7,8 @@
 #include "stream_handler.h"
 
 // Include game files
-#include "xo_game.h"
+#include "xo_x_game.h"
+#include "xo_o_game.h"
 #include "rubik_game.h"
 #include "memory_game.h"
 #include "threeCups_game.h"
@@ -55,11 +56,12 @@
 enum GameType
 {
   GAME_NONE = -1,
-  GAME_XO = 0,
-  GAME_RUBIK = 1,
-  GAME_MEMORY = 2,
-  GAME_CUPS = 3,
-  GAME_COUNT = 4
+  GAME_X_XO = 0,
+  GAME_O_XO = 1,
+  GAME_RUBIK = 2,
+  GAME_MEMORY = 3,
+  GAME_CUPS = 4,
+  GAME_COUNT = 5
 };
 
 typedef void (*GameFunctionPtr)();
@@ -107,6 +109,7 @@ bool switchGame(int gameIndex);
 
 // Function declarations for stopping games
 void stopXOGame();
+void stopXOOGame();
 void stopRubikGame();
 void stopMemoryGame();
 void stopCupsGame();
@@ -604,7 +607,8 @@ void printOnLCD(const String &msg)
 // Game management functions
 void initGames()
 {
-  games[GAME_XO] = {"XO", startXOGame, xoGameLoop, stopXOGame};
+  games[GAME_X_XO] = {"XO (Robot X)", startXOGame, xoGameLoop, stopXOGame};
+  games[GAME_O_XO] = {"XO (Robot O)", startXOOGame, xoOGameLoop, stopXOOGame};
   games[GAME_RUBIK] = {"Rubik's Cube", startRubikGame, rubikGameLoop, stopRubikGame};
   games[GAME_MEMORY] = {"Memory", startMemoryGame, memoryGameLoop, stopMemoryGame};
   games[GAME_CUPS] = {"3 Cups", startCupsGame, cupsGameLoop, stopCupsGame};
@@ -720,7 +724,7 @@ void setupServerEndpoints()
 #endif
 
 #if ENABLE_SERVER_GAME_CHANGE
-  Serial.println("Use '/changeGame?game=NAME' to switch games. Available games: xo, rubik, memory, cups, none.");
+  Serial.println("Use '/changeGame?game=NAME' to switch games. Available games: xoX, xoO, rubik, memory, cups, none.");
 #endif
 
 #if ENABLE_SERVER_GAME_INFO
@@ -866,8 +870,10 @@ void handleChangeGame(AsyncWebServerRequest *request)
   String gameParam = request->getParam("game")->value();
   int gameIndex = -1;
 
-  if (gameParam == "xo")
-    gameIndex = GAME_XO;
+  if (gameParam == "xoX")
+    gameIndex = GAME_X_XO;
+  else if (gameParam == "xoO")
+    gameIndex = GAME_O_XO;
   else if (gameParam == "rubik")
     gameIndex = GAME_RUBIK;
   else if (gameParam == "memory")
@@ -895,7 +901,7 @@ void handleChangeGame(AsyncWebServerRequest *request)
   }
   else
   {
-    AsyncWebServerResponse *response = request->beginResponse(400, "text/plain", "Invalid game name. Use: xo, rubik, memory, cups or none");
+    AsyncWebServerResponse *response = request->beginResponse(400, "text/plain", "Invalid game name. Use: xoX, xoO, rubik, memory, cups or none");
     addCorsHeaders(response);
     request->send(response);
   }
