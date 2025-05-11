@@ -161,6 +161,9 @@ void startMoveOperation(int from, int to)
   currentSrc = getPosition(from);
   currentDest = getPosition(to);
   armState = GRAB_OPEN_GRIP;
+  if((from == 6 || from == 7) && to < 6){
+    printOnLCD("Return cell" + String(from));
+  }
   if(to == 6 || to == 7){
     printOnLCD("Reveal cell " + String(from));
   }
@@ -550,7 +553,7 @@ void memoryGameLoop()
           Serial.print(", Matched=");
           Serial.println(cardMatched[i] ? "Yes" : "No");
         }
-
+        printOnLCD("Last match!");
         if (complete == SHAPES - 1)
         {
           int count = 0;
@@ -627,6 +630,7 @@ void memoryGameLoop()
             matchFound = true;
             Serial.print("Found known match for shape: ");
             Serial.println(shape);
+            printOnLCD("Match found!");
             gameState = GAME_MOVE_MATCHED_CARD1;
             break;
           }
