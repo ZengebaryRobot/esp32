@@ -14,8 +14,8 @@ extern void printOnLCD(const String &msg);
 #define PLAYER_X 1
 #define PLAYER_O 2
 
-#define GRIP_CLOSED 75
-#define GRIP_OPEN 105
+#define GRIP_CLOSED 80
+#define GRIP_OPEN 110
 #define DEFAULT_ANGLE_SHOULDER 90
 
 // Define game states
