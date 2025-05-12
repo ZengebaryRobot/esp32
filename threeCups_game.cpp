@@ -14,7 +14,7 @@ extern void printOnLCD(const String &msg);
 #define RIGHT_CUP 2
 #define NO_CUP -1
 
-#define GRIP_CLOSED 92
+#define GRIP_CLOSED 90
 #define GRIP_OPEN 130
 #define DEFAULT_ANGLE_SHOULDER 80
 const int retreatAngles[4] = {90, 90, 90, 90};
@@ -46,8 +46,8 @@ enum ArmMoveState
 // Cup position angles for the arm to point to
 const int cupAngleData[3][4] = {
     {138, 46, 126, 66}, // Left cup
-    {108, 60, 146, 80}, // Middle cup
-    {80, 48, 126, 64},  // Right cup
+    {110, 58, 140, 72}, // Middle cup
+    {80, 46, 124, 70},  // Right cup
 };
 
 // State machine variables

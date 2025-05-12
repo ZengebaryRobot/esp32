@@ -75,12 +75,12 @@ public:
   }
 };
 
-Position cell_0(126, 20, 75, 34);
-Position cell_1(111, 29, 90, 41);
-Position cell_2(96, 26, 85, 41);
-Position cell_3(133, 48, 124, 50);
-Position cell_4(113, 55, 135, 55);
-Position cell_5(91, 55, 134, 62);
+Position cell_0(126, 20, 75, 43);
+Position cell_1(111, 29, 90, 50);
+Position cell_2(94, 26, 85, 48);
+Position cell_3(133, 48, 124, 61);
+Position cell_4(113, 55, 135, 67);
+Position cell_5(91, 55, 134, 69);
 Position cell_6(82, 85, 169, 66);  // Temporary position 1
 Position cell_7(147, 78, 165, 72); // Temporary position 2
 Position cell_8(30, 105, 124, 50); // Output position

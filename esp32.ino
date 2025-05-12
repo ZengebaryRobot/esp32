@@ -83,11 +83,11 @@ int requestedGameIndex = -2; // -2 means no game switch requested
 SemaphoreHandle_t gameSwitchMutex = NULL;
 
 // Wifi credentials
-const char *ssid = "Zengebary";
+const char *ssid = "Zengebary2";
 const char *password = "1234abcdABCD";
 
 // Main server endpoint
-const char *serverEndpoint = "http://192.168.1.4:8000/process";
+const char *serverEndpoint = "http://192.168.25.167:8000/process";
 
 // HTTP server
 #if ENABLE_ESP32_SERVER
@@ -256,14 +256,6 @@ void initCamera()
 
 void connectToWiFi()
 {
-  // Set static IP address
-  IPAddress local_ip(192, 168, 1, 3);
-  IPAddress gateway(192, 168, 1, 1);
-  IPAddress subnet(255, 255, 255, 0);
-  if (!WiFi.config(local_ip, gateway, subnet))
-  {
-    Serial.println("Failed to configure static IP");
-  }
 
   WiFi.begin(ssid, password);
   WiFi.setSleep(false);
@@ -352,6 +344,8 @@ void changeConfig(String game)
 
   sensor_t *s = esp_camera_sensor_get();
 
+
+
   if (game == "xo")
   {
     s->set_framesize(s, (framesize_t)10);
@@ -406,7 +400,7 @@ void changeConfig(String game)
     s->set_special_effect(s, 0);
     s->set_wb_mode(s, 0);
     s->set_ae_level(s, 0);
-    analogWrite(LED_GPIO_NUM, 150);
+    analogWrite(LED_GPIO_NUM, 90);
   }
   else if (game == "memory")
   {
@@ -585,6 +579,8 @@ void printOnLCD(const String &msg)
   uint16_t len = msg.length();
   if (len > 32)
     len = 32;
+
+  lcd.clear();
 
   lcd.setCursor(0, 0);
   lcd.print(msg.substring(0, min<uint16_t>(len, 16)));

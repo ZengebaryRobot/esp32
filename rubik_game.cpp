@@ -111,8 +111,13 @@ void parseStepperCommands(int move)
   }
   else
   {
+    
     angle = 90;
     direction = 1;
+    if(motor == 1){
+      angle = 270;
+      direction = 0;
+    }
   }
 
   // Clear the stepperCmd array first
@@ -160,7 +165,7 @@ void rubikGameLoop()
 {
   if (i < 4)
   {
-    delay(100);
+    delay(500);
     sendFaceToServer();
     stepperCmd[2] = 90;
     stepperCmd[3] = 0;
@@ -186,7 +191,7 @@ void rubikGameLoop()
     stepperCmd[1] = 1;
     sendStepperCommand(stepperCmd); // U3
     stepperCmd[0] = 0;
-    delay(100);
+    delay(500);
 
     if (i < 7)
       sendFaceToServer();
@@ -209,7 +214,7 @@ void rubikGameLoop()
     stepperCmd[7] = 0;
     sendStepperCommand(stepperCmd); // D1
     stepperCmd[6] = 0;
-    delay(100);
+    delay(500);
 
     sendFaceToServer();
 
@@ -250,7 +255,7 @@ void rubikGameLoop()
     stepperCmd[7] = 1;
     sendStepperCommand(stepperCmd); // D3
     stepperCmd[6] = 0;
-    delay(100);
+    delay(500);
 
     sendFaceToServer();
 
@@ -291,7 +296,7 @@ void rubikGameLoop()
     stepperCmd[3] = 1;
     sendStepperCommand(stepperCmd); // R3
     stepperCmd[2] = 0;
-    delay(100);
+    delay(500);
 
     sendFaceToServer();
 
