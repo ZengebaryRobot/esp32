@@ -165,7 +165,7 @@ void rubikGameLoop()
 {
   if (i < 4)
   {
-    delay(500);
+    delay(100);
     sendFaceToServer();
     stepperCmd[2] = 90;
     stepperCmd[3] = 0;
@@ -191,7 +191,7 @@ void rubikGameLoop()
     stepperCmd[1] = 1;
     sendStepperCommand(stepperCmd); // U3
     stepperCmd[0] = 0;
-    delay(500);
+    delay(100);
 
     if (i < 7)
       sendFaceToServer();
@@ -214,7 +214,7 @@ void rubikGameLoop()
     stepperCmd[7] = 0;
     sendStepperCommand(stepperCmd); // D1
     stepperCmd[6] = 0;
-    delay(500);
+    delay(100);
 
     sendFaceToServer();
 
@@ -255,7 +255,7 @@ void rubikGameLoop()
     stepperCmd[7] = 1;
     sendStepperCommand(stepperCmd); // D3
     stepperCmd[6] = 0;
-    delay(500);
+    delay(100);
 
     sendFaceToServer();
 
@@ -296,7 +296,7 @@ void rubikGameLoop()
     stepperCmd[3] = 1;
     sendStepperCommand(stepperCmd); // R3
     stepperCmd[2] = 0;
-    delay(500);
+    delay(100);
 
     sendFaceToServer();
 

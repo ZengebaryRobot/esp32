@@ -87,7 +87,7 @@ const char *ssid = "Zengebary2";
 const char *password = "1234abcdABCD";
 
 // Main server endpoint
-const char *serverEndpoint = "http://192.168.25.167:8000/process";
+const char *serverEndpoint = "http://192.168.25.177:8000/process";
 
 // HTTP server
 #if ENABLE_ESP32_SERVER
