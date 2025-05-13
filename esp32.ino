@@ -1,7 +1,29 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
-#include <WebServer.h>
+#include <AsyncTCP.h>
+#include <ESPAsyncWebServer.h>
+#include <LiquidCrystal_I2C.h>
 #include "esp_camera.h"
+#include "stream_handler.h"
+
+// Include game files
+#include "xo_x_game.h"
+#include "xo_o_game.h"
+#include "rubik_game.h"
+#include "memory_game.h"
+#include "threeCups_game.h"
+
+// Enable ESP32 server
+#define ENABLE_ESP32_SERVER 1
+#define ENABLE_SERVER_STREAMING 1
+#define ENABLE_SERVER_CONFIG 1
+#define ENABLE_SERVER_GAME_CHANGE 1
+#define ENABLE_SERVER_GAME_INFO 1
+
+// LCD Display
+#define ENABLE_DISPLAY 1
+#define SDA_PIN 14
+#define SCL_PIN 15
 
 // Camera Pins
 #define PWDN_GPIO_NUM 32
@@ -9,7 +31,6 @@
 #define XCLK_GPIO_NUM 0
 #define SIOD_GPIO_NUM 26
 #define SIOC_GPIO_NUM 27
-
 #define Y9_GPIO_NUM 35
 #define Y8_GPIO_NUM 34
 #define Y7_GPIO_NUM 39
@@ -21,26 +42,113 @@
 #define VSYNC_GPIO_NUM 25
 #define HREF_GPIO_NUM 23
 #define PCLK_GPIO_NUM 22
-
 #define LED_GPIO_NUM 4
 
-// Serial2 Pins
+// Serial2 Pins (comm with Arduino)
 #define RXD2 13
 #define TXD2 12
+#define STEPPER_COUNT 10
+#define TIMEOUT_MS_SERVO 5000
+#define TIMEOUT_MS_STEPPER 5000
+#define MAX_SIZE 30
 
-const char *ssid = "Zengebary";
+// Game management
+enum GameType
+{
+  GAME_NONE = -1,
+  GAME_X_XO = 0,
+  GAME_O_XO = 1,
+  GAME_RUBIK = 2,
+  GAME_MEMORY = 3,
+  GAME_CUPS = 4,
+  GAME_COUNT = 5
+};
+
+typedef void (*GameFunctionPtr)();
+
+struct Game
+{
+  const char *name;
+  GameFunctionPtr startGame;
+  GameFunctionPtr gameLoop;
+  GameFunctionPtr stopGame;
+};
+
+Game games[GAME_COUNT];
+int currentGameIndex = GAME_NONE;
+
+// Game switching request
+bool gameSwitchInProgress = false;
+int requestedGameIndex = -2; // -2 means no game switch requested
+SemaphoreHandle_t gameSwitchMutex = NULL;
+
+// Wifi credentials
+const char *ssid = "Zengebary2";
 const char *password = "1234abcdABCD";
 
-const char *serverEndpoint = "http://192.168.1.3:5000/process";
-const char *slaveCamEndpoint = "http://192.168.1.100/capture";
+// Main server endpoint
+const char *serverEndpoint = "http://192.168.25.177:8000/process";
 
-WebServer server(80);
+// HTTP server
+#if ENABLE_ESP32_SERVER
+AsyncWebServer server(80);
+#endif
+
+// LCD Display
+#if ENABLE_DISPLAY
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+#endif
+
+// Camera configuration
 sensor_t *sensor = nullptr;
 
+void initCamera();
+void connectToWiFi();
+void initGames();
+bool switchGame(int gameIndex);
+
+// Function declarations for stopping games
+void stopXOGame();
+void stopXOOGame();
+void stopRubikGame();
+void stopMemoryGame();
+void stopCupsGame();
+
+String readLine();
+bool sendServoCommand(int a1, int a2, int a3);
+bool sendStepperCommand(const int cmds[10]);
+
 void changeConfig(String command);
-void handleConfig();
-void handleStream();
 String getPythonData(String command);
+void parseCSV(const char *csv, int arr[], int &count);
+
+#if ENABLE_DISPLAY
+void initDisplay();
+void printOnLCD(const String &msg);
+#endif
+
+#if ENABLE_ESP32_SERVER
+void setupServerEndpoints();
+bool toBool(String value);
+
+#if ENABLE_SERVER_GAME_CHANGE
+void handleChangeGame(AsyncWebServerRequest *request);
+#endif
+
+#if ENABLE_SERVER_GAME_INFO
+void handleGetCurrentGame(AsyncWebServerRequest *request);
+#endif
+
+#if ENABLE_SERVER_CONFIG
+void handleConfig(AsyncWebServerRequest *request);
+#endif
+
+#if ENABLE_SERVER_STREAMING
+void handleStream(AsyncWebServerRequest *request);
+void handleStreamJpg(AsyncWebServerRequest *request);
+#endif
+
+#endif
 
 void setup()
 {
@@ -51,7 +159,46 @@ void setup()
   // Arduino communication
   Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2);
 
-  // Camera init config
+  initCamera();
+  connectToWiFi();
+  initGames();
+  changeConfig("none");
+
+#if ENABLE_DISPLAY
+  initDisplay();
+  printOnLCD("No Game is      selected");
+#endif
+
+#if ENABLE_ESP32_SERVER
+  setupServerEndpoints();
+#endif
+
+  // Create mutex for game switching
+  gameSwitchMutex = xSemaphoreCreateMutex();
+}
+
+void loop()
+{
+  // Check if a game switch has been requested
+  if (xSemaphoreTake(gameSwitchMutex, 0) == pdTRUE)
+  {
+    if (requestedGameIndex != -2)
+    {
+      int gameToSwitch = requestedGameIndex;
+      requestedGameIndex = -2;
+      performGameSwitch(gameToSwitch);
+    }
+    xSemaphoreGive(gameSwitchMutex);
+  }
+
+  // Run the current game loop if one is active
+  if (currentGameIndex >= 0 && currentGameIndex < GAME_COUNT)
+    games[currentGameIndex].gameLoop();
+}
+
+// Setup functions
+void initCamera()
+{
   camera_config_t config;
   config.ledc_channel = LEDC_CHANNEL_0;
   config.ledc_timer = LEDC_TIMER_0;
@@ -105,8 +252,11 @@ void setup()
     sensor->set_saturation(sensor, -2);
   }
   sensor->set_framesize(sensor, FRAMESIZE_VGA);
+}
 
-  // Connect to WiFi
+void connectToWiFi()
+{
+
   WiFi.begin(ssid, password);
   WiFi.setSleep(false);
   Serial.print("WiFi connecting");
@@ -119,185 +269,227 @@ void setup()
 
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
-
-  // Endpoints
-  server.on("/config", HTTP_GET, handleConfig);
-  server.on("/stream", HTTP_GET, handleStream);
-  server.begin();
-  Serial.println("HTTP server started on port 80");
-
-  Serial.println("Use '/stream' to access the stream.");
-  Serial.println("Use '/config' to set config.");
 }
 
-void loop()
+// Arduino communication functions
+String readLine(int timeout)
 {
-  server.handleClient();
-
-  if (Serial2.available())
+  unsigned long start = millis();
+  String s;
+  while (millis() - start < timeout)
   {
-    String line = Serial2.readStringUntil('\n');
-    line.trim();
-    if (line.length())
+    if (Serial2.available())
     {
-      Serial.println("Received command: " + line);
-
-      // <camId> <action>
-      int sp = line.indexOf(' ');
-      if (sp < 0)
-      {
-        Serial2.println("ERROR");
-      }
-      else
-      {
-        int camId = line.substring(0, sp).toInt();
-        String action = line.substring(sp + 1);
-        String serverReply = getPythonData(action, camId);
-        Serial2.println(serverReply);
-      }
+      char c = Serial2.read();
+      if (c == '\n')
+        break;
+      s += c;
     }
-
-    while (Serial2.available())
-      Serial2.read();
   }
 
-  delay(10);
+  if (s.length() > 0 && s[s.length() - 1] == '\r')
+    s.remove(s.length() - 1, 1);
+
+  Serial.print("Received: ");
+  Serial.println(s);
+
+  return s;
 }
 
-String latestCommand = "";
-void changeConfig(String command)
+bool sendServoCommand(int a1, int a2, int a3)
 {
-  if (latestCommand == command)
+  while (Serial2.available())
+    Serial2.read();
+
+  Serial2.print('A');
+  Serial2.print(',');
+  Serial2.print(a1);
+  Serial2.print(',');
+  Serial2.print(a2);
+  Serial2.print(',');
+  Serial2.println(a3);
+
+  String resp = readLine(TIMEOUT_MS_SERVO);
+
+  return (resp == "OK");
+}
+
+bool sendStepperCommand(const int cmds[STEPPER_COUNT])
+{
+  while (Serial2.available())
+    Serial2.read();
+
+  Serial2.print('S');
+  for (int i = 0; i < STEPPER_COUNT; i++)
+  {
+    Serial2.print(',');
+    Serial2.print(cmds[i]);
+  }
+  Serial2.println();
+
+  String resp = readLine(TIMEOUT_MS_STEPPER);
+
+  return (resp == "OK");
+}
+
+// Change camera configuration
+String latestGame = "";
+void changeConfig(String game)
+{
+  if (latestGame == game)
     return;
 
-  latestCommand = command;
-  Serial.println("Changing config to: " + command);
+  latestGame = game;
+  Serial.println("Changing config to: " + game);
 
   sensor_t *s = esp_camera_sensor_get();
 
-  // Reset to default settings
-  s->set_framesize(s, FRAMESIZE_VGA);
-  s->set_quality(s, 12);
-  s->set_saturation(s, 0);
-  analogWrite(LED_GPIO_NUM, 0);
 
-  if (command == "xo")
+
+  if (game == "xo")
   {
-    s->set_framesize(s, FRAMESIZE_VGA);
+    s->set_framesize(s, (framesize_t)10);
     s->set_quality(s, 9);
+    s->set_contrast(s, 0);
+    s->set_brightness(s, 0);
     s->set_saturation(s, 2);
+    s->set_gainceiling(s, (gainceiling_t)0);
+    s->set_colorbar(s, 0);
+    s->set_whitebal(s, 1);
+    s->set_gain_ctrl(s, 1);
+    s->set_exposure_ctrl(s, 1);
+    s->set_hmirror(s, 0);
+    s->set_vflip(s, 0);
+    s->set_awb_gain(s, 1);
+    s->set_agc_gain(s, 0);
+    s->set_aec_value(s, 168);
+    s->set_aec2(s, 1);
+    s->set_dcw(s, 1);
+    s->set_bpc(s, 1);
+    s->set_wpc(s, 1);
+    s->set_raw_gma(s, 1);
+    s->set_lenc(s, 1);
+    s->set_special_effect(s, 0);
+    s->set_wb_mode(s, 0);
+    s->set_ae_level(s, 0);
     analogWrite(LED_GPIO_NUM, 200);
   }
-  else if (command == "rubik")
+  else if (game == "rubik")
   {
-    //
+    s->set_framesize(s, (framesize_t)10);
+    s->set_quality(s, 9);
+    s->set_contrast(s, 0);
+    s->set_brightness(s, 0);
+    s->set_saturation(s, 0);
+    s->set_gainceiling(s, (gainceiling_t)0);
+    s->set_colorbar(s, 0);
+    s->set_whitebal(s, 1);
+    s->set_gain_ctrl(s, 1);
+    s->set_exposure_ctrl(s, 1);
+    s->set_hmirror(s, 1);
+    s->set_vflip(s, 1);
+    s->set_awb_gain(s, 1);
+    s->set_agc_gain(s, 0);
+    s->set_aec_value(s, 168);
+    s->set_aec2(s, 1);
+    s->set_dcw(s, 1);
+    s->set_bpc(s, 1);
+    s->set_wpc(s, 1);
+    s->set_raw_gma(s, 1);
+    s->set_lenc(s, 1);
+    s->set_special_effect(s, 0);
+    s->set_wb_mode(s, 0);
+    s->set_ae_level(s, 0);
+    analogWrite(LED_GPIO_NUM, 90);
+  }
+  else if (game == "memory")
+  {
+    s->set_framesize(s, (framesize_t)13);
+    s->set_quality(s, 10);
+    s->set_contrast(s, 2);
+    s->set_brightness(s, -2);
+    s->set_saturation(s, 0);
+    s->set_gainceiling(s, (gainceiling_t)0);
+    s->set_colorbar(s, 0);
+    s->set_whitebal(s, 1);
+    s->set_gain_ctrl(s, 1);
+    s->set_exposure_ctrl(s, 1);
+    s->set_hmirror(s, 0);
+    s->set_vflip(s, 0);
+    s->set_awb_gain(s, 1);
+    s->set_agc_gain(s, 0);
+    s->set_aec_value(s, 1200);
+    s->set_aec2(s, 1);
+    s->set_dcw(s, 1);
+    s->set_bpc(s, 1);
+    s->set_wpc(s, 1);
+    s->set_raw_gma(s, 1);
+    s->set_lenc(s, 1);
+    s->set_special_effect(s, 2);
+    s->set_wb_mode(s, 0);
+    s->set_ae_level(s, 2);
+    analogWrite(LED_GPIO_NUM, 136);
+  }
+  else if (game == "cups")
+  {
+    s->set_framesize(s, (framesize_t)10);
+    s->set_quality(s, 9);
+    s->set_contrast(s, 0);
+    s->set_brightness(s, 0);
+    s->set_saturation(s, 0);
+    s->set_gainceiling(s, (gainceiling_t)0);
+    s->set_colorbar(s, 0);
+    s->set_whitebal(s, 1);
+    s->set_gain_ctrl(s, 1);
+    s->set_exposure_ctrl(s, 1);
+    s->set_hmirror(s, 0);
+    s->set_vflip(s, 0);
+    s->set_awb_gain(s, 1);
+    s->set_agc_gain(s, 0);
+    s->set_aec_value(s, 168);
+    s->set_aec2(s, 1);
+    s->set_dcw(s, 1);
+    s->set_bpc(s, 1);
+    s->set_wpc(s, 1);
+    s->set_raw_gma(s, 1);
+    s->set_lenc(s, 1);
+    s->set_special_effect(s, 0);
+    s->set_wb_mode(s, 0);
+    s->set_ae_level(s, 0);
+    analogWrite(LED_GPIO_NUM, 200);
+  }
+  else
+  {
+    s->set_framesize(s, (framesize_t)10);
+    s->set_quality(s, 9);
+    s->set_contrast(s, 0);
+    s->set_brightness(s, 0);
+    s->set_saturation(s, 0);
+    s->set_gainceiling(s, (gainceiling_t)0);
+    s->set_colorbar(s, 0);
+    s->set_whitebal(s, 1);
+    s->set_gain_ctrl(s, 1);
+    s->set_exposure_ctrl(s, 1);
+    s->set_hmirror(s, 0);
+    s->set_vflip(s, 0);
+    s->set_awb_gain(s, 1);
+    s->set_agc_gain(s, 0);
+    s->set_aec_value(s, 168);
+    s->set_aec2(s, 1);
+    s->set_dcw(s, 1);
+    s->set_bpc(s, 1);
+    s->set_wpc(s, 1);
+    s->set_raw_gma(s, 1);
+    s->set_lenc(s, 1);
+    s->set_special_effect(s, 0);
+    s->set_wb_mode(s, 0);
+    s->set_ae_level(s, 0);
+    analogWrite(LED_GPIO_NUM, 0);
   }
 }
 
-bool toBool(String value)
-{
-  value.toLowerCase();
-  return (value == "1" || value == "true" || value == "on");
-}
-
-void handleConfig()
-{
-  sensor_t *s = esp_camera_sensor_get();
-
-  if (server.hasArg("framesize"))
-  {
-    String value = server.arg("framesize");
-    if (value == "QVGA")
-      s->set_framesize(s, FRAMESIZE_QVGA);
-    else if (value == "SVGA")
-      s->set_framesize(s, FRAMESIZE_SVGA);
-    else if (value == "VGA")
-      s->set_framesize(s, FRAMESIZE_VGA);
-  }
-
-  if (server.hasArg("quality"))
-    s->set_quality(s, server.arg("quality").toInt());
-  if (server.hasArg("contrast"))
-    s->set_contrast(s, server.arg("contrast").toInt());
-  if (server.hasArg("brightness"))
-    s->set_brightness(s, server.arg("brightness").toInt());
-  if (server.hasArg("saturation"))
-    s->set_saturation(s, server.arg("saturation").toInt());
-  if (server.hasArg("gainceiling"))
-    s->set_gainceiling(s, (gainceiling_t)server.arg("gainceiling").toInt());
-
-  if (server.hasArg("colorbar"))
-    s->set_colorbar(s, toBool(server.arg("colorbar")));
-  if (server.hasArg("awb"))
-    s->set_whitebal(s, toBool(server.arg("awb")));
-  if (server.hasArg("agc"))
-    s->set_gain_ctrl(s, toBool(server.arg("agc")));
-  if (server.hasArg("aec"))
-    s->set_exposure_ctrl(s, toBool(server.arg("aec")));
-  if (server.hasArg("hmirror"))
-    s->set_hmirror(s, toBool(server.arg("hmirror")));
-  if (server.hasArg("vflip"))
-    s->set_vflip(s, toBool(server.arg("vflip")));
-
-  if (server.hasArg("awb_gain"))
-    s->set_awb_gain(s, server.arg("awb_gain").toInt());
-  if (server.hasArg("agc_gain"))
-    s->set_agc_gain(s, server.arg("agc_gain").toInt());
-  if (server.hasArg("aec_value"))
-    s->set_aec_value(s, server.arg("aec_value").toInt());
-
-  if (server.hasArg("aec2"))
-    s->set_aec2(s, toBool(server.arg("aec2")));
-  if (server.hasArg("dcw"))
-    s->set_dcw(s, toBool(server.arg("dcw")));
-  if (server.hasArg("bpc"))
-    s->set_bpc(s, toBool(server.arg("bpc")));
-  if (server.hasArg("wpc"))
-    s->set_wpc(s, toBool(server.arg("wpc")));
-  if (server.hasArg("raw_gma"))
-    s->set_raw_gma(s, toBool(server.arg("raw_gma")));
-  if (server.hasArg("lenc"))
-    s->set_lenc(s, toBool(server.arg("lenc")));
-
-  if (server.hasArg("ae_level"))
-    s->set_ae_level(s, server.arg("ae_level").toInt());
-
-  if (server.hasArg("led_intensity"))
-  {
-    int intensity = server.arg("led_intensity").toInt();
-    analogWrite(LED_GPIO_NUM, intensity);
-  }
-
-  server.send(200, "text/plain", "Camera settings updated!");
-}
-
-void handleStream()
-{
-  WiFiClient client = server.client();
-  String header =
-      "HTTP/1.1 200 OK\r\n"
-      "Content-Type: multipart/x-mixed-replace; boundary=frame\r\n\r\n";
-  client.print(header);
-
-  while (client.connected())
-  {
-    camera_fb_t *fb = esp_camera_fb_get();
-    if (!fb)
-    {
-      Serial.println("Camera capture failed");
-      break;
-    }
-    client.printf("--frame\r\nContent-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n", fb->len);
-    client.write(fb->buf, fb->len);
-    client.print("\r\n");
-    esp_camera_fb_return(fb);
-    if (!client.connected())
-      break;
-    delay(30);
-  }
-}
-
-String getPythonData(String command, int camId)
+// Server communication functions
+String getPythonData(String command)
 {
   if (WiFi.status() != WL_CONNECTED)
   {
@@ -307,45 +499,11 @@ String getPythonData(String command, int camId)
 
   camera_fb_t *fb = nullptr;
 
-  if (camId == 0)
+  fb = esp_camera_fb_get();
+  if (!fb)
   {
-    changeConfig(command);
-
-    fb = esp_camera_fb_get();
-    if (!fb)
-    {
-      Serial.println("Camera capture failed");
-      return "ERROR";
-    }
-  }
-  else
-  {
-    HTTPClient httpGet;
-    httpGet.begin(slaveCamEndpoint);
-
-    int code = httpGet.GET();
-
-    if (code != 200)
-    {
-      Serial.println("Failed to get image from slave camera. HTTP code: " + String(code) + " - " + httpGet.errorToString(code));
-      httpGet.end();
-      return "ERROR";
-    }
-
-    WiFiClient *stream = httpGet.getStreamPtr();
-    size_t len = httpGet.getSize();
-
-    fb = (camera_fb_t *)malloc(sizeof(camera_fb_t));
-    fb->len = len;
-    fb->buf = (uint8_t *)malloc(len);
-
-    size_t idx = 0;
-    while (stream->available() && idx < len)
-    {
-      fb->buf[idx++] = stream->read();
-    }
-
-    httpGet.end();
+    Serial.println("Camera capture failed");
+    return "ERROR";
   }
 
   HTTPClient http;
@@ -378,15 +536,391 @@ String getPythonData(String command, int camId)
 
   http.end();
 
-  if (camId == 0)
-  {
-    esp_camera_fb_return(fb);
-  }
-  else
-  {
-    free(fb->buf);
-    free(fb);
-  }
+  esp_camera_fb_return(fb);
 
   return response;
 }
+
+void parseCSV(const char *csv, int arr[], int &count)
+{
+  count = 0;
+  char buffer[256];
+  strncpy(buffer, csv, sizeof(buffer));
+  buffer[sizeof(buffer) - 1] = '\0';
+
+  char *token = strtok(buffer, ",");
+
+  while (token != NULL && count < MAX_SIZE)
+  {
+    arr[count++] = atoi(token);
+    token = strtok(NULL, ",");
+  }
+}
+
+// LCD Display
+#if ENABLE_DISPLAY
+void initDisplay()
+{
+  Wire.begin(SDA_PIN, SCL_PIN);
+
+  lcd.init();
+  lcd.backlight();
+
+  lcd.clear();
+
+  lcd.setCursor(0, 0);
+  lcd.print("Ready!");
+}
+#endif
+
+void printOnLCD(const String &msg)
+{
+#if ENABLE_DISPLAY
+  uint16_t len = msg.length();
+  if (len > 32)
+    len = 32;
+
+  lcd.clear();
+
+  lcd.setCursor(0, 0);
+  lcd.print(msg.substring(0, min<uint16_t>(len, 16)));
+
+  lcd.setCursor(0, 1);
+  if (len > 16)
+  {
+    lcd.print(msg.substring(16, len));
+  }
+  else
+  {
+    lcd.print("                ");
+  }
+#else
+  Serial.print("LCD: ");
+  Serial.println(msg);
+#endif
+}
+
+// Game management functions
+void initGames()
+{
+  games[GAME_X_XO] = {"XO (Robot X)", startXOGame, xoGameLoop, stopXOGame};
+  games[GAME_O_XO] = {"XO (Robot O)", startXOOGame, xoOGameLoop, stopXOOGame};
+  games[GAME_RUBIK] = {"Rubik's Cube", startRubikGame, rubikGameLoop, stopRubikGame};
+  games[GAME_MEMORY] = {"Memory", startMemoryGame, memoryGameLoop, stopMemoryGame};
+  games[GAME_CUPS] = {"3 Cups", startCupsGame, cupsGameLoop, stopCupsGame};
+}
+
+bool switchGame(int gameIndex)
+{
+  if (xSemaphoreTake(gameSwitchMutex, portMAX_DELAY) == pdTRUE)
+  {
+    requestedGameIndex = gameIndex;
+    xSemaphoreGive(gameSwitchMutex);
+    return true;
+  }
+  else
+  {
+    Serial.println("Game already switching");
+    return false;
+  }
+}
+
+void performGameSwitch(int gameIndex)
+{
+  Serial.print("Performing game switch to: ");
+  Serial.println(gameIndex);
+
+  if (gameIndex < -1 || gameIndex >= GAME_COUNT)
+  {
+    Serial.println("Invalid game index");
+    printOnLCD("Invalid game");
+    return;
+  }
+
+  bool sameGame = (currentGameIndex == gameIndex);
+
+  // Stop the current game if one is running
+  if (currentGameIndex >= 0 && currentGameIndex < GAME_COUNT)
+  {
+    Serial.print("Stopping game: ");
+    Serial.println(games[currentGameIndex].name);
+    printOnLCD("Stopping:       " + String(games[currentGameIndex].name));
+    games[currentGameIndex].stopGame();
+  }
+
+  if (gameIndex >= 0 && gameIndex < GAME_COUNT)
+  {
+    currentGameIndex = gameIndex;
+    String message = sameGame ? "Restarting:     " : "Starting:       ";
+    message += String(games[currentGameIndex].name);
+
+    Serial.print(sameGame ? "Restarting game: " : "Switching to game: ");
+    Serial.println(games[currentGameIndex].name);
+
+    printOnLCD(message);
+    games[currentGameIndex].startGame();
+  }
+  else
+  {
+    currentGameIndex = GAME_NONE;
+    printOnLCD("No Game is      selected");
+  }
+}
+
+// ESP32 Server Endpoints Handlers
+#if ENABLE_ESP32_SERVER
+void setupServerEndpoints()
+{
+#if ENABLE_SERVER_CONFIG
+  server.on("/config", HTTP_GET, handleConfig);
+#endif
+
+#if ENABLE_SERVER_STREAMING
+
+  if (start_stream_server())
+  {
+    Serial.println("ESP-IDF streaming server started on port 81");
+  }
+  else
+  {
+    Serial.println("Failed to start ESP-IDF streaming server");
+  }
+
+  server.on("/stream", HTTP_GET, handleStream);
+  server.on("/streamjpg", HTTP_GET, handleStreamJpg);
+#endif
+
+#if ENABLE_SERVER_GAME_CHANGE
+  server.on("/changeGame", HTTP_GET, handleChangeGame);
+  server.on("/changeGame", HTTP_OPTIONS, [](AsyncWebServerRequest *request)
+            {
+    AsyncWebServerResponse *response = request->beginResponse(200, "text/plain", "OK");
+    addCorsHeaders(response);
+    request->send(response); });
+#endif
+
+#if ENABLE_SERVER_GAME_INFO
+  server.on("/getCurrentGame", HTTP_GET, handleGetCurrentGame);
+  server.on("/getCurrentGame", HTTP_OPTIONS, [](AsyncWebServerRequest *request)
+            {
+    AsyncWebServerResponse *response = request->beginResponse(200, "text/plain", "OK");
+    addCorsHeaders(response);
+    request->send(response); });
+#endif
+
+  server.begin();
+  Serial.println("HTTP server started on port 80");
+
+#if ENABLE_SERVER_STREAMING
+  Serial.println("Use '/stream' to access the stream.");
+#endif
+
+#if ENABLE_SERVER_CONFIG
+  Serial.println("Use '/config' to set config.");
+#endif
+
+#if ENABLE_SERVER_GAME_CHANGE
+  Serial.println("Use '/changeGame?game=NAME' to switch games. Available games: xoX, xoO, rubik, memory, cups, none.");
+#endif
+
+#if ENABLE_SERVER_GAME_INFO
+  Serial.println("Use '/getCurrentGame' to get current game info.");
+#endif
+}
+
+void addCorsHeaders(AsyncWebServerResponse *response)
+{
+  response->addHeader("Access-Control-Allow-Origin", "*");
+  response->addHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  response->addHeader("Access-Control-Allow-Headers", "Content-Type");
+}
+
+bool toBool(String value)
+{
+  value.toLowerCase();
+  return (value == "1" || value == "true" || value == "on");
+}
+
+#if ENABLE_SERVER_CONFIG
+void handleConfig(AsyncWebServerRequest *request)
+{
+  sensor_t *s = esp_camera_sensor_get();
+
+  if (request->hasParam("framesize"))
+  {
+    String value = request->getParam("framesize")->value();
+    s->set_framesize(s, (framesize_t)value.toInt());
+  }
+
+  if (request->hasParam("quality"))
+    s->set_quality(s, request->getParam("quality")->value().toInt());
+  if (request->hasParam("contrast"))
+    s->set_contrast(s, request->getParam("contrast")->value().toInt());
+  if (request->hasParam("brightness"))
+    s->set_brightness(s, request->getParam("brightness")->value().toInt());
+  if (request->hasParam("saturation"))
+    s->set_saturation(s, request->getParam("saturation")->value().toInt());
+  if (request->hasParam("gainceiling"))
+    s->set_gainceiling(s, (gainceiling_t)request->getParam("gainceiling")->value().toInt());
+
+  if (request->hasParam("colorbar"))
+    s->set_colorbar(s, toBool(request->getParam("colorbar")->value()));
+  if (request->hasParam("awb"))
+    s->set_whitebal(s, toBool(request->getParam("awb")->value()));
+  if (request->hasParam("agc"))
+    s->set_gain_ctrl(s, toBool(request->getParam("agc")->value()));
+  if (request->hasParam("aec"))
+    s->set_exposure_ctrl(s, toBool(request->getParam("aec")->value()));
+  if (request->hasParam("hmirror"))
+    s->set_hmirror(s, toBool(request->getParam("hmirror")->value()));
+  if (request->hasParam("vflip"))
+    s->set_vflip(s, toBool(request->getParam("vflip")->value()));
+
+  if (request->hasParam("awb_gain"))
+    s->set_awb_gain(s, request->getParam("awb_gain")->value().toInt());
+  if (request->hasParam("agc_gain"))
+    s->set_agc_gain(s, request->getParam("agc_gain")->value().toInt());
+  if (request->hasParam("aec_value"))
+    s->set_aec_value(s, request->getParam("aec_value")->value().toInt());
+
+  if (request->hasParam("aec2"))
+    s->set_aec2(s, toBool(request->getParam("aec2")->value()));
+  if (request->hasParam("dcw"))
+    s->set_dcw(s, toBool(request->getParam("dcw")->value()));
+  if (request->hasParam("bpc"))
+    s->set_bpc(s, toBool(request->getParam("bpc")->value()));
+  if (request->hasParam("wpc"))
+    s->set_wpc(s, toBool(request->getParam("wpc")->value()));
+  if (request->hasParam("raw_gma"))
+    s->set_raw_gma(s, toBool(request->getParam("raw_gma")->value()));
+  if (request->hasParam("lenc"))
+    s->set_lenc(s, toBool(request->getParam("lenc")->value()));
+
+  if (request->hasParam("ae_level"))
+    s->set_ae_level(s, request->getParam("ae_level")->value().toInt());
+
+  if (request->hasParam("led_intensity"))
+  {
+    int intensity = request->getParam("led_intensity")->value().toInt();
+    analogWrite(LED_GPIO_NUM, intensity);
+  }
+
+  request->send(200, "text/plain", "Camera settings updated!");
+}
+#endif
+
+#if ENABLE_SERVER_STREAMING
+void handleStream(AsyncWebServerRequest *request)
+{
+  request->redirect("http://" + WiFi.localIP().toString() + ":81/stream");
+}
+
+void handleStreamJpg(AsyncWebServerRequest *request)
+{
+  static unsigned long last_capture = 0;
+  unsigned long current_millis = millis();
+
+  if (current_millis - last_capture < 50)
+  {
+    delay(50);
+  }
+
+  camera_fb_t *fb = esp_camera_fb_get();
+  if (!fb)
+  {
+    Serial.println("Camera capture failed in handleStreamJpg. Possible causes: camera not initialized, insufficient memory, or hardware issue");
+
+    // Try capture again
+    fb = esp_camera_fb_get();
+    if (!fb)
+    {
+      request->send(500, "text/plain", "Camera capture failed - Please restart device");
+      return;
+    }
+  }
+
+  last_capture = current_millis;
+
+  AsyncWebServerResponse *response = request->beginResponse_P(200, "image/jpeg", fb->buf, fb->len);
+  response->addHeader("Content-Disposition", "inline; filename=capture.jpg");
+  response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  response->addHeader("Pragma", "no-cache");
+  response->addHeader("Expires", "0");
+  request->send(response);
+
+  esp_camera_fb_return(fb);
+}
+#endif
+
+#if ENABLE_SERVER_GAME_CHANGE
+void handleChangeGame(AsyncWebServerRequest *request)
+{
+  if (!request->hasParam("game"))
+  {
+    AsyncWebServerResponse *response = request->beginResponse(400, "text/plain", "Missing 'game' parameter");
+    addCorsHeaders(response);
+    request->send(response);
+    return;
+  }
+
+  String gameParam = request->getParam("game")->value();
+  int gameIndex = -1;
+
+  if (gameParam == "xoX")
+    gameIndex = GAME_X_XO;
+  else if (gameParam == "xoO")
+    gameIndex = GAME_O_XO;
+  else if (gameParam == "rubik")
+    gameIndex = GAME_RUBIK;
+  else if (gameParam == "memory")
+    gameIndex = GAME_MEMORY;
+  else if (gameParam == "cups")
+    gameIndex = GAME_CUPS;
+  else
+    gameIndex = GAME_NONE;
+
+  if (gameIndex >= GAME_NONE)
+  {
+    bool success = switchGame(gameIndex);
+    if (success)
+    {
+      AsyncWebServerResponse *response = request->beginResponse(200, "text/plain", "Game change request queued: " + gameParam);
+      addCorsHeaders(response);
+      request->send(response);
+    }
+    else
+    {
+      AsyncWebServerResponse *response = request->beginResponse(409, "text/plain", "Game already switching");
+      addCorsHeaders(response);
+      request->send(response);
+    }
+  }
+  else
+  {
+    AsyncWebServerResponse *response = request->beginResponse(400, "text/plain", "Invalid game name. Use: xoX, xoO, rubik, memory, cups or none");
+    addCorsHeaders(response);
+    request->send(response);
+  }
+}
+#endif
+
+#if ENABLE_SERVER_GAME_INFO
+void handleGetCurrentGame(AsyncWebServerRequest *request)
+{
+  String response;
+
+  if (currentGameIndex == GAME_NONE)
+  {
+    response = "None";
+  }
+  else
+  {
+    response = String(games[currentGameIndex].name);
+  }
+
+  AsyncWebServerResponse *webResponse = request->beginResponse(200, "text/plain", response);
+  addCorsHeaders(webResponse);
+  request->send(webResponse);
+}
+#endif
+#endif
